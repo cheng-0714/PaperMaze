@@ -38,7 +38,24 @@ describe("searchMaze", () => {
       [1, 0, 0, 0, 1],
       [1, 1, 1, 1, 1],
     ]);
+    const before = JSON.stringify(input);
     expect(searchMaze(input, "bfs")).toMatchObject({ found: false, path: [] });
+    expect(searchMaze(input, "astar")).toMatchObject({ found: false, path: [] });
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it("takes the legal detour around a wall", () => {
+    const input = maze([
+      [1, 1, 1, 1, 1],
+      [1, 0, 1, 0, 1],
+      [1, 0, 1, 0, 1],
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+    ]);
+    const result = searchMaze(input, "bfs");
+    expect(result.found).toBe(true);
+    expect(result.path).toHaveLength(7);
+    expect(validatePath(input, result.path)).toBe(true);
   });
 
   it("A* finds a path no longer than BFS and visits no more nodes on the fixture", () => {

@@ -3,13 +3,14 @@ import { applyEdit, generateMaze, movePlayer, parseChallengeCode, toChallengeCod
 
 describe("maze", () => {
   it("recreates the same connected maze from a seed", () => {
-    const first = generateMaze(11, 12345);
-    const second = generateMaze(11, 12345);
-
-    expect(first).toEqual(second);
-    expect(first.cells[first.start.row]?.[first.start.col]).toBe(0);
-    expect(first.cells[first.goal.row]?.[first.goal.col]).toBe(0);
-    expect(first.start).not.toEqual(first.goal);
+    for (const size of [11, 21, 31] as const) {
+      const first = generateMaze(size, 12345);
+      const second = generateMaze(size, 12345);
+      expect(first).toEqual(second);
+      expect(first.cells[first.start.row]?.[first.start.col]).toBe(0);
+      expect(first.cells[first.goal.row]?.[first.goal.col]).toBe(0);
+      expect(first.start).not.toEqual(first.goal);
+    }
   });
 
   it("moves only to an in-bounds passage", () => {
@@ -39,6 +40,7 @@ describe("maze", () => {
     const maze = generateMaze(11, 77);
     expect(applyEdit(maze, "passage", { row: 0, col: 1 }).error).toBe("border");
     expect(applyEdit(maze, "wall", maze.start).error).toBe("marker");
+    expect(applyEdit(maze, "goal", { row: 2, col: 2 }).error).toBe("wall");
     const moved = applyEdit(maze, "start", { row: 1, col: 2 });
     expect(moved.error).toBeNull();
     expect(moved.maze.start).toEqual({ row: 1, col: 2 });

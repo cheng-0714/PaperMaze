@@ -34,6 +34,11 @@ export function usePlayback() {
       cursor.value = 0;
     }
     if (!source.value || cursor.value >= total.value) cursor.value = 0;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      cursor.value = total.value;
+      playing.value = false;
+      return;
+    }
     playing.value = true;
     previous = 0;
     cancelAnimationFrame(frame);

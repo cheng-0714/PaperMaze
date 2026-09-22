@@ -1,4 +1,4 @@
-import type { Maze, Point } from "./maze";
+import { pointKey as key, type Maze, type Point } from "./maze";
 
 export type SearchAlgorithm = "bfs" | "astar";
 export type SearchResult = {
@@ -8,7 +8,6 @@ export type SearchResult = {
   computeMs: number;
 };
 
-const key = ({ row, col }: Point) => `${row},${col}`;
 const neighbors = (maze: Maze, point: Point): Point[] => [
   { row: point.row - 1, col: point.col },
   { row: point.row, col: point.col + 1 },
@@ -39,7 +38,9 @@ export function searchMaze(maze: Maze, algorithm: SearchAlgorithm): SearchResult
       frontier.sort((a, b) => {
         const af = a.g + Math.abs(a.point.row - maze.goal.row) + Math.abs(a.point.col - maze.goal.col);
         const bf = b.g + Math.abs(b.point.row - maze.goal.row) + Math.abs(b.point.col - maze.goal.col);
-        return af - bf || a.order - b.order;
+        const ah = Math.abs(a.point.row - maze.goal.row) + Math.abs(a.point.col - maze.goal.col);
+        const bh = Math.abs(b.point.row - maze.goal.row) + Math.abs(b.point.col - maze.goal.col);
+        return af - bf || ah - bh || a.order - b.order;
       });
     }
     const current = frontier.shift()!;

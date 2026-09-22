@@ -58,7 +58,7 @@ input, select { min-height: 38px; border: 1px solid #d8cbbb; border-radius: 9px;
 .legend { display: flex; gap: 10px; flex-wrap: wrap; color: #746d72; font-size: 12px; }
 .legend span { display: flex; align-items: center; gap: 4px; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
-.start-dot { background: #2a9d8f; } .goal-dot { background: #e63946; } .visited-dot { background: #99d6cf; } .path-dot { background: #f2bd45; }
+.start-dot { background: #2a9d8f; } .goal-dot { background: #e63946; } .player-dot { border-radius: 50%; background: #2d3142; } .visited-dot { background: #99d6cf; } .path-dot { background: #f2bd45; }
 .maze.editable { cursor: crosshair; }
 .button-row, .playback-controls, .tool-row { display: flex; gap: 7px; flex-wrap: wrap; }
 .button-row button { flex: 1; }
@@ -69,6 +69,7 @@ input, select { min-height: 38px; border: 1px solid #d8cbbb; border-radius: 9px;
 .result-card small { color: #766f75; overflow-wrap: anywhere; }
 .playback-controls { align-items: end; }
 .playback-controls label { margin-left: auto; }
+.metric-note { margin: 10px 0 0; color: #7b7479; font-size: 12px; line-height: 1.5; }
 .tool-row button { border: 1px solid #d5c7b5; border-radius: 8px; padding: 6px 8px; color: #57525a; background: #fffaf1; }
 .tool-row button.active { color: white; border-color: #9d532f; background: #9d532f; }
 .history-panel { margin-top: 22px; }

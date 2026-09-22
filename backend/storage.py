@@ -32,14 +32,14 @@ def insert_run(database: Path, payload: dict) -> None:
         )
 
 
-def list_runs(database: Path, mode: str | None = None, limit: int = 100) -> list[dict]:
+def list_runs(database: Path, mode: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
     with connect(database) as connection:
         if mode:
             rows = connection.execute(
-                "SELECT payload_json FROM runs WHERE mode = ? ORDER BY created_at DESC LIMIT ?", (mode, limit)
+                "SELECT payload_json FROM runs WHERE mode = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", (mode, limit, offset)
             ).fetchall()
         else:
-            rows = connection.execute("SELECT payload_json FROM runs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+            rows = connection.execute("SELECT payload_json FROM runs ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
     return [json.loads(row["payload_json"]) for row in rows]
 
 

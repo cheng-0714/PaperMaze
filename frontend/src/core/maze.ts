@@ -14,6 +14,8 @@ export type Maze = Readonly<{
 
 export const SUPPORTED_SIZES = [11, 21, 31] as const;
 export type EditTool = "wall" | "passage" | "start" | "goal";
+export const pointKey = (point: Point) => `${point.row},${point.col}`;
+export const samePoint = (a: Point, b: Point) => a.row === b.row && a.col === b.col;
 
 const mulberry32 = (seed: number) => () => {
   let value = (seed += 0x6d2b79f5);
@@ -85,9 +87,7 @@ export function movePlayer(maze: Maze, position: Point, direction: Direction) {
   return { position: next, blocked: null };
 }
 
-const samePoint = (a: Point, b: Point) => a.row === b.row && a.col === b.col;
-
-export function applyEdit(maze: Maze, tool: EditTool, point: Point): { maze: Maze; error: "border" | "marker" | null } {
+export function applyEdit(maze: Maze, tool: EditTool, point: Point): { maze: Maze; error: "border" | "marker" | "wall" | null } {
   if (point.row <= 0 || point.col <= 0 || point.row >= maze.size - 1 || point.col >= maze.size - 1) {
     return { maze, error: "border" };
   }
@@ -96,6 +96,9 @@ export function applyEdit(maze: Maze, tool: EditTool, point: Point): { maze: Maz
   }
   if ((tool === "start" && samePoint(point, maze.goal)) || (tool === "goal" && samePoint(point, maze.start))) {
     return { maze, error: "marker" };
+  }
+  if ((tool === "start" || tool === "goal") && maze.cells[point.row]?.[point.col] !== 0) {
+    return { maze, error: "wall" };
   }
   const cells = maze.cells.map((row) => [...row]);
   cells[point.row]![point.col] = tool === "wall" ? 1 : 0;

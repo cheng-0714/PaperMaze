@@ -57,6 +57,7 @@ def test_completed_run_is_retrievable_after_app_restart(tmp_path):
         listing = client.get("/api/runs")
         assert listing.status_code == 200
         assert listing.json()["items"][0]["id"] == "run-1"
+        assert "maze" not in listing.json()["items"][0]
         detail = client.get("/api/runs/run-1")
         assert detail.status_code == 200
         assert detail.json()["maze"]["cells"][1][1:3] == [0, 0]
@@ -86,6 +87,7 @@ def test_search_runs_support_failure_filter_and_delete(tmp_path):
         filtered = client.get("/api/runs", params={"mode": "bfs", "limit": 1})
         assert filtered.status_code == 200
         assert [item["mode"] for item in filtered.json()["items"]] == ["bfs"]
+        assert filtered.json()["offset"] == 0
 
         assert client.delete("/api/runs/search-1").status_code == 204
         assert client.get("/api/runs/search-1").status_code == 404

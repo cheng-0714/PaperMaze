@@ -44,8 +44,8 @@ class RunCreate(BaseModel):
     mode: Literal["manual", "bfs", "astar"]
     maze: MazeSnapshot
     found: bool
-    path: list[Point]
-    visitedOrder: list[Point] | None
+    path: list[Point] = Field(max_length=10_000)
+    visitedOrder: list[Point] | None = Field(max_length=961)
     computeMs: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     manualElapsedMs: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
@@ -102,8 +102,23 @@ def create_app(database: Path | str = Path("papermaze.sqlite3")) -> FastAPI:
         return JSONResponse(payload, status_code=status.HTTP_201_CREATED)
 
     @app.get("/api/runs")
-    def runs(mode: Literal["manual", "bfs", "astar"] | None = None, limit: int = Query(100, ge=1, le=100)):
-        return {"items": list_runs(database_path, mode, limit)}
+    def runs(
+        mode: Literal["manual", "bfs", "astar"] | None = None,
+        limit: int = Query(100, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        items = list_runs(database_path, mode, limit, offset)
+        summaries = [
+            {
+                "id": item["id"], "mode": item["mode"], "found": item["found"],
+                "pathLength": item["pathLength"], "visitedCount": item["visitedCount"],
+                "computeMs": item["computeMs"], "manualElapsedMs": item["manualElapsedMs"],
+                "createdAt": item["createdAt"], "mazeSize": item["maze"]["size"],
+                "seed": item["maze"]["seed"], "edited": item["maze"]["edited"],
+            }
+            for item in items
+        ]
+        return {"items": summaries, "limit": limit, "offset": offset}
 
     @app.get("/api/runs/{run_id}")
     def run_detail(run_id: str):

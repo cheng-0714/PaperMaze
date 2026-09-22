@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { createRun, deleteRun, getRun, listRuns, type Run } from "./api";
-import { applyEdit, generateMaze, movePlayer, parseChallengeCode, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
-import { searchMaze, type SearchAlgorithm, type SearchResult } from "./core/search";
+import { createRun, deleteRun, getRun, listRuns, type Run, type RunSummary } from "./api";
+import { applyEdit, generateMaze, movePlayer, parseChallengeCode, pointKey, samePoint as same, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
+import { searchMaze, validatePath, type SearchAlgorithm, type SearchResult } from "./core/search";
 import { usePlayback } from "./usePlayback";
 
 const newSeed = () => Math.floor(Math.random() * 0xffffffff) + 1;
@@ -11,10 +11,11 @@ const seedInput = ref(newSeed());
 const maze = ref(generateMaze(selectedSize.value, seedInput.value));
 const player = ref<Point>(maze.value.start);
 const manualPath = ref<Point[]>([maze.value.start]);
+const manualElapsedMs = ref<number | null>(null);
 const startedAt = ref<number | null>(null);
 const status = ref("使用方向键、WASD 或按钮开始探索");
 const saveState = ref<"idle" | "saving" | "saved" | "error">("idle");
-const history = ref<Run[]>([]);
+const history = ref<RunSummary[]>([]);
 const historyFilter = ref<"all" | Run["mode"]>("all");
 const pendingRun = ref<Run | null>(null);
 const results = ref<Partial<Record<SearchAlgorithm, SearchResult>>>({});
@@ -26,14 +27,13 @@ const cell = 24;
 
 const boardSize = computed(() => maze.value.size * cell);
 const challengeCode = computed(() => toChallengeCode(maze.value));
-const pointKey = (point: Point) => `${point.row},${point.col}`;
-const same = (a: Point, b: Point) => a.row === b.row && a.col === b.col;
 const visibleVisited = computed(() => new Set(playback.visibleVisited.value.map(pointKey)));
 const visiblePath = computed(() => new Set(playback.visiblePath.value.map(pointKey)));
+const playbackBusy = computed(() => playback.total.value > 0 && playback.cursor.value < playback.total.value);
 
 function clearRunState(message: string) {
   playback.cancel(); results.value = {}; activeAlgorithm.value = null;
-  player.value = maze.value.start; manualPath.value = [maze.value.start]; startedAt.value = null;
+  player.value = maze.value.start; manualPath.value = [maze.value.start]; startedAt.value = null; manualElapsedMs.value = null;
   saveState.value = "idle"; pendingRun.value = null; status.value = message;
 }
 
@@ -55,7 +55,7 @@ async function persist(run: Run) {
   pendingRun.value = run; saveState.value = "saving";
   try {
     const saved = await createRun(run);
-    history.value = [saved, ...history.value.filter((item) => item.id !== saved.id)];
+    await refreshHistory();
     saveState.value = "saved"; pendingRun.value = null;
   } catch (error) {
     saveState.value = "error";
@@ -70,13 +70,18 @@ function move(direction: Direction) {
   if (startedAt.value === null) startedAt.value = performance.now();
   player.value = result.position; manualPath.value = [...manualPath.value, result.position]; status.value = "继续前进";
   if (same(result.position, maze.value.goal)) {
-    const elapsed = performance.now() - startedAt.value!; status.value = `抵达终点，共 ${manualPath.value.length - 1} 步`;
+    const elapsed = performance.now() - startedAt.value!; manualElapsedMs.value = elapsed; status.value = `抵达终点，共 ${manualPath.value.length - 1} 步，用时 ${(elapsed / 1000).toFixed(1)} 秒`;
     void persist({ id: crypto.randomUUID(), schemaVersion: 1, mode: "manual", maze: maze.value, found: true, path: manualPath.value, visitedOrder: null, computeMs: null, manualElapsedMs: elapsed });
   }
 }
 
 function runSearch(algorithm: SearchAlgorithm) {
+  if (playbackBusy.value) return;
   const result = searchMaze(maze.value, algorithm);
+  if (result.found && !validatePath(maze.value, result.path)) {
+    status.value = `${algorithm.toUpperCase()} 返回了非法路径，结果未保存`;
+    return;
+  }
   results.value = { ...results.value, [algorithm]: result }; activeAlgorithm.value = algorithm; playback.play(result);
   status.value = result.found ? `${algorithm.toUpperCase()} 找到 ${result.path.length - 1} 步路径，访问 ${result.visitedOrder.length} 个节点` : `${algorithm.toUpperCase()} 已完成搜索：当前迷宫无可达路径`;
   void persist({ id: crypto.randomUUID(), schemaVersion: 1, mode: algorithm, maze: maze.value, found: result.found, path: result.path, visitedOrder: result.visitedOrder, computeMs: result.computeMs, manualElapsedMs: null });
@@ -87,12 +92,12 @@ function switchResult(algorithm: SearchAlgorithm) {
 }
 
 function editBoard(event: MouseEvent) {
-  if (editTool.value === "move") return;
+  if (editTool.value === "move" || playbackBusy.value) return;
   const bounds = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
   const point = { row: Math.floor(((event.clientY - bounds.top) / bounds.height) * maze.value.size), col: Math.floor(((event.clientX - bounds.left) / bounds.width) * maze.value.size) };
   if (editTool.value === "wall" && same(point, player.value)) { status.value = "不能在玩家当前位置放置墙体"; return; }
   const edited = applyEdit(maze.value, editTool.value, point);
-  if (edited.error) { status.value = edited.error === "border" ? "外边框必须保持封闭" : "起点与终点不能重合或被墙覆盖"; return; }
+  if (edited.error) { status.value = edited.error === "border" ? "外边框必须保持封闭" : edited.error === "wall" ? "起点和终点只能放在通路格" : "起点与终点不能重合或被墙覆盖"; return; }
   maze.value = edited.maze; clearRunState("迷宫已编辑，旧搜索结果已清除");
 }
 
@@ -103,6 +108,12 @@ async function restoreRun(id: string) {
   if (run.mode !== "manual" && run.visitedOrder) {
     const result = { found: run.found, path: run.path, visitedOrder: run.visitedOrder, computeMs: run.computeMs ?? 0 };
     results.value = { [run.mode]: result }; activeAlgorithm.value = run.mode; playback.play(result);
+  } else if (run.mode === "manual") {
+    manualPath.value = run.path;
+    player.value = run.path[run.path.length - 1] ?? run.maze.start;
+    manualElapsedMs.value = run.manualElapsedMs;
+    playback.play({ found: true, path: run.path, visitedOrder: [], computeMs: 0 });
+    status.value = `已恢复手动挑战：${run.path.length - 1} 步，用时 ${((run.manualElapsedMs ?? 0) / 1000).toFixed(1)} 秒`;
   }
 }
 async function removeRun(id: string) { await deleteRun(id); history.value = history.value.filter((run) => run.id !== id); status.value = "历史记录已删除"; }
@@ -129,7 +140,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
     <section class="workspace">
       <div class="board-card">
-        <div class="board-toolbar"><div><strong>{{ maze.size }} × {{ maze.size }}</strong><small>种子 {{ maze.seed }}{{ maze.edited ? ' · 已编辑' : '' }}</small></div><div class="legend"><span><i class="dot start-dot"></i>起点</span><span><i class="dot goal-dot"></i>终点</span><span><i class="dot visited-dot"></i>访问</span><span><i class="dot path-dot"></i>路径</span></div></div>
+        <div class="board-toolbar"><div><strong>{{ maze.size }} × {{ maze.size }}</strong><small>种子 {{ maze.seed }}{{ maze.edited ? ' · 已编辑' : '' }}</small></div><div class="legend"><span><i class="dot start-dot"></i>起点</span><span><i class="dot goal-dot"></i>终点</span><span><i class="dot player-dot"></i>玩家</span><span><i class="dot visited-dot"></i>访问</span><span><i class="dot path-dot"></i>路径</span></div></div>
         <svg class="maze" :class="{ editable: editTool !== 'move' }" :viewBox="`0 0 ${boardSize} ${boardSize}`" role="img" aria-label="可操作的迷宫画布" @click="editBoard">
           <rect width="100%" height="100%" rx="12" class="board-base" />
           <template v-for="(row, rowIndex) in maze.cells" :key="rowIndex"><template v-for="(value, colIndex) in row" :key="colIndex">
@@ -143,18 +154,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
 
       <aside class="side-panel">
-        <section class="panel"><p class="section-label">算法实验</p><div class="button-row"><button @click="runSearch('bfs')">运行 BFS</button><button @click="runSearch('astar')">运行 A*</button></div>
+        <section class="panel"><p class="section-label">算法实验</p><div class="button-row"><button :disabled="playbackBusy" @click="runSearch('bfs')">运行 BFS</button><button :disabled="playbackBusy" @click="runSearch('astar')">运行 A*</button></div>
           <div class="result-grid"><button v-for="algorithm in (['bfs','astar'] as const)" :key="algorithm" class="result-card" :class="{ active: activeAlgorithm === algorithm }" :disabled="!results[algorithm]" @click="switchResult(algorithm)"><b>{{ algorithm.toUpperCase() }}</b><span>{{ results[algorithm]?.found === false ? '无解' : `${(results[algorithm]?.path.length ?? 1) - 1} 步` }}</span><small>{{ results[algorithm]?.visitedOrder.length ?? '—' }} 个访问节点 · {{ results[algorithm]?.computeMs.toFixed(2) ?? '—' }} ms</small></button></div>
-          <div class="playback-controls"><button :disabled="!playback.total.value" @click="playback.play()">重放</button><button :disabled="!playback.playing.value" @click="playback.pause">暂停</button><label>速度<select v-model.number="playback.speed.value"><option :value=".5">0.5×</option><option :value="1">1×</option><option :value="2">2×</option></select></label></div>
+          <div class="playback-controls"><button :disabled="!playback.total.value" @click="playback.play()">{{ playbackBusy && !playback.playing.value ? '继续' : '重放' }}</button><button :disabled="!playback.playing.value" @click="playback.pause">暂停</button><label>速度<select v-model.number="playback.speed.value"><option :value=".5">0.5×</option><option :value="1">1×</option><option :value="2">2×</option></select></label></div><p class="metric-note">访问数为算法出队节点数；耗时只统计搜索计算，不含动画与保存。</p>
         </section>
-        <section class="panel"><p class="section-label">手动探索与编辑</p><div class="tool-row" role="toolbar" aria-label="迷宫编辑工具"><button v-for="tool in (['move','wall','passage','start','goal'] as const)" :key="tool" :class="{ active: editTool === tool }" :aria-pressed="editTool === tool" @click="editTool = tool">{{ { move:'移动', wall:'画墙', passage:'擦除', start:'起点', goal:'终点' }[tool] }}</button></div>
-          <div class="dpad" aria-label="方向控制"><button class="up" aria-label="向上" @click="move('up')">↑</button><button class="left" aria-label="向左" @click="move('left')">←</button><button class="down" aria-label="向下" @click="move('down')">↓</button><button class="right" aria-label="向右" @click="move('right')">→</button></div><div class="metrics"><span>当前步数</span><strong>{{ manualPath.length - 1 }}</strong></div>
+        <section class="panel"><p class="section-label">手动探索与编辑</p><div class="tool-row" role="toolbar" aria-label="迷宫编辑工具"><button v-for="tool in (['move','wall','passage','start','goal'] as const)" :key="tool" :disabled="playbackBusy" :class="{ active: editTool === tool }" :aria-pressed="editTool === tool" @click="editTool = tool">{{ { move:'移动', wall:'画墙', passage:'擦除', start:'起点', goal:'终点' }[tool] }}</button></div>
+          <div class="dpad" aria-label="方向控制"><button class="up" aria-label="向上" @click="move('up')">↑</button><button class="left" aria-label="向左" @click="move('left')">←</button><button class="down" aria-label="向下" @click="move('down')">↓</button><button class="right" aria-label="向右" @click="move('right')">→</button></div><div class="metrics"><span>当前步数</span><strong>{{ manualPath.length - 1 }}</strong></div><div class="metrics"><span>挑战用时</span><strong>{{ manualElapsedMs == null ? '—' : `${(manualElapsedMs / 1000).toFixed(1)}s` }}</strong></div>
         </section>
       </aside>
     </section>
 
     <section class="panel history-panel"><div class="history-heading"><div><p class="section-label">实验档案</p><h2>运行历史</h2></div><label>筛选<select v-model="historyFilter" @change="refreshHistory"><option value="all">全部</option><option value="manual">手动</option><option value="bfs">BFS</option><option value="astar">A*</option></select></label></div>
-      <p v-if="history.length === 0" class="empty">完成一次手动挑战或算法搜索后，记录会出现在这里。</p><div class="history-list"><article v-for="run in history" :key="run.id" class="history-row"><span class="mode-badge">{{ run.mode === 'manual' ? '手动' : run.mode.toUpperCase() }}</span><div><strong>{{ run.found ? `${run.pathLength ?? run.path.length - 1} 步` : '无解' }}</strong><small>{{ run.maze.size }}×{{ run.maze.size }} · seed {{ run.maze.seed }}<template v-if="run.visitedCount != null"> · {{ run.visitedCount }} 次访问</template></small></div><button class="secondary" @click="restoreRun(run.id)">恢复</button><button class="danger" aria-label="删除此运行" @click="removeRun(run.id)">删除</button></article></div>
+      <p v-if="history.length === 0" class="empty">完成一次手动挑战或算法搜索后，记录会出现在这里。</p><div class="history-list"><article v-for="run in history" :key="run.id" class="history-row"><span class="mode-badge">{{ run.mode === 'manual' ? '手动' : run.mode.toUpperCase() }}</span><div><strong>{{ run.found ? `${run.pathLength ?? 0} 步` : '无解' }}</strong><small>{{ run.mazeSize }}×{{ run.mazeSize }} · seed {{ run.seed }}<template v-if="run.visitedCount != null"> · {{ run.visitedCount }} 次访问</template></small></div><button class="secondary" @click="restoreRun(run.id)">恢复</button><button class="danger" aria-label="删除此运行" @click="removeRun(run.id)">删除</button></article></div>
     </section>
   </main>
 </template>
