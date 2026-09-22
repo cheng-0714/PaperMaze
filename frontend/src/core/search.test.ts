@@ -13,6 +13,17 @@ const maze = (cells: Maze["cells"], goal = { row: 1, col: 3 }): Maze => ({
 });
 
 describe("searchMaze", () => {
+  it("solves a straight corridor", () => {
+    const input = maze([
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ]);
+    expect(searchMaze(input, "bfs").path).toHaveLength(3);
+  });
+
   it("BFS returns a shortest valid path without changing the maze", () => {
     const input = maze([
       [1, 1, 1, 1, 1],

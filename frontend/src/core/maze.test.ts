@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyEdit, generateMaze, movePlayer, parseChallengeCode, toChallengeCode, type Maze } from "./maze";
+import { searchMaze } from "./search";
 
 describe("maze", () => {
   it("recreates the same connected maze from a seed", () => {
@@ -10,6 +11,7 @@ describe("maze", () => {
       expect(first.cells[first.start.row]?.[first.start.col]).toBe(0);
       expect(first.cells[first.goal.row]?.[first.goal.col]).toBe(0);
       expect(first.start).not.toEqual(first.goal);
+      expect(searchMaze(first, "bfs").found).toBe(true);
     }
   });
 

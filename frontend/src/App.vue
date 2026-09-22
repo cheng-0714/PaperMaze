@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { createRun, deleteRun, getRun, listRuns, type Run, type RunSummary } from "./api";
 import { applyEdit, generateMaze, movePlayer, parseChallengeCode, pointKey, samePoint as same, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
 import { searchMaze, validatePath, type SearchAlgorithm, type SearchResult } from "./core/search";
@@ -23,6 +23,7 @@ const activeAlgorithm = ref<SearchAlgorithm | null>(null);
 const editTool = ref<"move" | EditTool>("move");
 const challengeInput = ref("");
 const playback = usePlayback();
+const mazeElement = ref<SVGSVGElement | null>(null);
 const cell = 24;
 
 const boardSize = computed(() => maze.value.size * cell);
@@ -123,8 +124,7 @@ function onKeydown(event: KeyboardEvent) {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
   const direction = keyDirections[event.key]; if (!direction) return; event.preventDefault(); move(direction);
 }
-onMounted(async () => { window.addEventListener("keydown", onKeydown); try { await refreshHistory(); } catch { status.value = "历史记录暂时不可用，仍可继续探索"; } });
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+onMounted(async () => { mazeElement.value?.focus(); try { await refreshHistory(); } catch { status.value = "历史记录暂时不可用，仍可继续探索"; } });
 </script>
 
 <template>
@@ -141,7 +141,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     <section class="workspace">
       <div class="board-card">
         <div class="board-toolbar"><div><strong>{{ maze.size }} × {{ maze.size }}</strong><small>种子 {{ maze.seed }}{{ maze.edited ? ' · 已编辑' : '' }}</small></div><div class="legend"><span><i class="dot start-dot"></i>起点</span><span><i class="dot goal-dot"></i>终点</span><span><i class="dot player-dot"></i>玩家</span><span><i class="dot visited-dot"></i>访问</span><span><i class="dot path-dot"></i>路径</span></div></div>
-        <svg class="maze" :class="{ editable: editTool !== 'move' }" :viewBox="`0 0 ${boardSize} ${boardSize}`" role="img" aria-label="可操作的迷宫画布" @click="editBoard">
+        <svg ref="mazeElement" class="maze" :class="{ editable: editTool !== 'move' }" :viewBox="`0 0 ${boardSize} ${boardSize}`" role="img" aria-label="可操作的迷宫画布，聚焦后可用方向键或 WASD 移动" tabindex="0" @keydown="onKeydown" @click="editBoard">
           <rect width="100%" height="100%" rx="12" class="board-base" />
           <template v-for="(row, rowIndex) in maze.cells" :key="rowIndex"><template v-for="(value, colIndex) in row" :key="colIndex">
             <rect v-if="value === 0 && visibleVisited.has(`${rowIndex},${colIndex}`)" :x="colIndex * cell + 3" :y="rowIndex * cell + 3" :width="cell - 6" :height="cell - 6" rx="5" class="visited" />

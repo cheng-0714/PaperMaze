@@ -72,6 +72,12 @@ class RunCreate(BaseModel):
             for point in self.visitedOrder:
                 if point.row >= self.maze.size or point.col >= self.maze.size or self.maze.cells[point.row][point.col] != 0:
                     raise ValueError("visited nodes must stay on passages")
+            visited_keys = {(point.row, point.col) for point in self.visitedOrder}
+            if not self.visitedOrder or self.visitedOrder[0] != self.maze.start or len(visited_keys) != len(self.visitedOrder):
+                raise ValueError("search trace must start at the configured start and contain unique nodes")
+            goal_visited = (self.maze.goal.row, self.maze.goal.col) in visited_keys
+            if goal_visited != self.found:
+                raise ValueError("search trace and found state are inconsistent")
         return self
 
 

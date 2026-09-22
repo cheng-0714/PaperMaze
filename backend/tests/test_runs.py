@@ -100,3 +100,11 @@ def test_invalid_run_is_rejected(tmp_path):
     with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
         response = client.post("/api/runs", json=invalid)
     assert response.status_code == 422
+
+
+def test_inconsistent_search_trace_is_rejected(tmp_path):
+    invalid = search_run()
+    invalid["visitedOrder"] = []
+    with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
+        response = client.post("/api/runs", json=invalid)
+    assert response.status_code == 422
