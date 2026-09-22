@@ -179,9 +179,9 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
       <aside class="side-panel">
         <section class="control-section">
           <h2>寻路</h2>
-          <div class="button-row"><button class="primary" :disabled="playbackBusy" @click="runSearch('bfs')">BFS</button><button class="primary" :disabled="playbackBusy" @click="runSearch('astar')">A*</button></div>
-          <div v-if="results.bfs || results.astar" class="result-grid">
-            <button v-for="algorithm in (['bfs','astar'] as const)" :key="algorithm" class="result-card" :class="{ active: activeAlgorithm === algorithm }" :disabled="!results[algorithm]" @click="switchResult(algorithm)">
+          <div class="button-row"><button class="primary" :disabled="playbackBusy" @click="runSearch('bfs')">BFS<span aria-hidden="true">↗</span></button><button class="primary" :disabled="playbackBusy" @click="runSearch('astar')">A*<span aria-hidden="true">↗</span></button></div>
+          <div v-if="results.bfs || results.astar" class="result-list">
+            <button v-for="algorithm in (['bfs','astar'] as const)" :key="algorithm" class="result-row" :class="{ active: activeAlgorithm === algorithm }" :disabled="!results[algorithm]" @click="switchResult(algorithm)">
               <b>{{ algorithm === 'astar' ? 'A*' : 'BFS' }}</b><span>{{ !results[algorithm] ? '未运行' : results[algorithm]?.found === false ? '无解' : `${results[algorithm]!.path.length - 1} 步` }}</span><small v-if="results[algorithm]">{{ results[algorithm]!.visitedOrder.length }} 访问<br>{{ results[algorithm]!.computeMs.toFixed(2) }} ms</small>
             </button>
           </div>
