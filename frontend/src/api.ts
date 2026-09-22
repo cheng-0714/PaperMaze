@@ -28,4 +28,12 @@ async function json<T>(response: Response): Promise<T> {
 export const createRun = async (run: Run) =>
   json<Run>(await fetch("/api/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(run) }));
 
-export const listRuns = async () => json<{ items: Run[] }>(await fetch("/api/runs"));
+export const listRuns = async (mode?: RunMode) =>
+  json<{ items: Run[] }>(await fetch(`/api/runs${mode ? `?mode=${mode}` : ""}`));
+
+export const getRun = async (id: string) => json<Run>(await fetch(`/api/runs/${encodeURIComponent(id)}`));
+
+export async function deleteRun(id: string) {
+  const response = await fetch(`/api/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("删除失败");
+}

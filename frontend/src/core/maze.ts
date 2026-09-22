@@ -13,6 +13,7 @@ export type Maze = Readonly<{
 }>;
 
 export const SUPPORTED_SIZES = [11, 21, 31] as const;
+export type EditTool = "wall" | "passage" | "start" | "goal";
 
 const mulberry32 = (seed: number) => () => {
   let value = (seed += 0x6d2b79f5);
@@ -82,4 +83,40 @@ export function movePlayer(maze: Maze, position: Point, direction: Direction) {
     return { position, blocked: "wall" as const };
   }
   return { position: next, blocked: null };
+}
+
+const samePoint = (a: Point, b: Point) => a.row === b.row && a.col === b.col;
+
+export function applyEdit(maze: Maze, tool: EditTool, point: Point): { maze: Maze; error: "border" | "marker" | null } {
+  if (point.row <= 0 || point.col <= 0 || point.row >= maze.size - 1 || point.col >= maze.size - 1) {
+    return { maze, error: "border" };
+  }
+  if (tool === "wall" && (samePoint(point, maze.start) || samePoint(point, maze.goal))) {
+    return { maze, error: "marker" };
+  }
+  if ((tool === "start" && samePoint(point, maze.goal)) || (tool === "goal" && samePoint(point, maze.start))) {
+    return { maze, error: "marker" };
+  }
+  const cells = maze.cells.map((row) => [...row]);
+  cells[point.row]![point.col] = tool === "wall" ? 1 : 0;
+  return {
+    maze: {
+      ...maze,
+      edited: true,
+      cells,
+      start: tool === "start" ? point : maze.start,
+      goal: tool === "goal" ? point : maze.goal,
+    },
+    error: null,
+  };
+}
+
+export const toChallengeCode = (maze: Maze) => `PM${maze.generatorVersion}-${maze.size}-${maze.seed}`;
+
+export function parseChallengeCode(code: string): { size: 11 | 21 | 31; seed: number } | null {
+  const match = /^PM1-(11|21|31)-([1-9]\d*)$/.exec(code.trim().toUpperCase());
+  if (!match) return null;
+  const seed = Number(match[2]);
+  if (!Number.isInteger(seed) || seed > 0xffffffff) return null;
+  return { size: Number(match[1]) as 11 | 21 | 31, seed };
 }

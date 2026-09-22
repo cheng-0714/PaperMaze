@@ -32,9 +32,14 @@ def insert_run(database: Path, payload: dict) -> None:
         )
 
 
-def list_runs(database: Path) -> list[dict]:
+def list_runs(database: Path, mode: str | None = None, limit: int = 100) -> list[dict]:
     with connect(database) as connection:
-        rows = connection.execute("SELECT payload_json FROM runs ORDER BY created_at DESC LIMIT 100").fetchall()
+        if mode:
+            rows = connection.execute(
+                "SELECT payload_json FROM runs WHERE mode = ? ORDER BY created_at DESC LIMIT ?", (mode, limit)
+            ).fetchall()
+        else:
+            rows = connection.execute("SELECT payload_json FROM runs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     return [json.loads(row["payload_json"]) for row in rows]
 
 
@@ -42,3 +47,9 @@ def get_run(database: Path, run_id: str) -> dict | None:
     with connect(database) as connection:
         row = connection.execute("SELECT payload_json FROM runs WHERE id = ?", (run_id,)).fetchone()
     return json.loads(row["payload_json"]) if row else None
+
+
+def delete_run(database: Path, run_id: str) -> bool:
+    with connect(database) as connection:
+        cursor = connection.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+    return cursor.rowcount > 0

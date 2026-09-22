@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateMaze, movePlayer, type Maze } from "./maze";
+import { applyEdit, generateMaze, movePlayer, parseChallengeCode, toChallengeCode, type Maze } from "./maze";
 
 describe("maze", () => {
   it("recreates the same connected maze from a seed", () => {
@@ -33,5 +33,23 @@ describe("maze", () => {
       position: { row: 0, col: 0 },
       blocked: "boundary",
     });
+  });
+
+  it("edits passages, start and goal while protecting the border and markers", () => {
+    const maze = generateMaze(11, 77);
+    expect(applyEdit(maze, "passage", { row: 0, col: 1 }).error).toBe("border");
+    expect(applyEdit(maze, "wall", maze.start).error).toBe("marker");
+    const moved = applyEdit(maze, "start", { row: 1, col: 2 });
+    expect(moved.error).toBeNull();
+    expect(moved.maze.start).toEqual({ row: 1, col: 2 });
+    expect(moved.maze.cells[1]?.[2]).toBe(0);
+    expect(moved.maze.edited).toBe(true);
+  });
+
+  it("round-trips a deterministic challenge code", () => {
+    const maze = generateMaze(21, 12345);
+    expect(toChallengeCode(maze)).toBe("PM1-21-12345");
+    expect(parseChallengeCode("PM1-21-12345")).toEqual({ size: 21, seed: 12345 });
+    expect(parseChallengeCode("bad-code")).toBeNull();
   });
 });
