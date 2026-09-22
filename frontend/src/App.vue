@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { createRun, deleteRun, getRun, listRuns, type Run, type RunSummary } from "./api";
 import { applyEdit, generateMaze, movePlayer, parseChallengeCode, pointKey, samePoint as same, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
 import { searchMaze, validatePath, type SearchAlgorithm, type SearchResult } from "./core/search";
 import PaperLayers from "./PaperLayers.vue";
+import OrbitMaze from "./OrbitMaze.vue";
 import { usePlayback } from "./usePlayback";
 
 const newSeed = () => Math.floor(Math.random() * 0xffffffff) + 1;
 const selectedSize = ref<11 | 21 | 31>(21);
+const observing = ref(false);
 const showSettings = ref(false);
 const showHistory = ref(false);
 const seedInput = ref(newSeed());
@@ -34,7 +36,18 @@ const challengeCode = computed(() => toChallengeCode(maze.value));
 const pathLine = computed(() => playback.visiblePath.value.map(p => `${(p.col + .5) * cell},${(p.row + .5) * cell}`).join(" "));
 const playbackBusy = computed(() => playback.total.value > 0 && playback.cursor.value < playback.total.value);
 
+async function returnToBoard() {
+  observing.value = false;
+  await nextTick();
+  mazeElement.value?.focus();
+}
+function chooseTool(tool: "move" | EditTool) {
+  editTool.value = tool;
+  void returnToBoard();
+}
+
 function clearRunState(message: string) {
+  observing.value = false;
   playback.cancel(); results.value = {}; activeAlgorithm.value = null;
   player.value = maze.value.start; manualPath.value = [maze.value.start]; startedAt.value = null; manualElapsedMs.value = null;
   saveState.value = "idle"; pendingRun.value = null; status.value = message;
@@ -69,6 +82,7 @@ async function persist(run: Run) {
 }
 
 function move(direction: Direction) {
+  if (observing.value) void returnToBoard();
   if (editTool.value !== "move" || same(player.value, maze.value.goal)) return;
   const result = movePlayer(maze.value, player.value, direction);
   if (result.blocked) { status.value = result.blocked === "wall" ? "前方是墙" : "已经到达边界"; return; }
@@ -160,9 +174,10 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
 
     <section class="workspace">
       <div class="board-card">
-        <div class="board-toolbar"><span>{{ maze.size }} × {{ maze.size }}<small v-if="maze.edited">已编辑</small></span><button @click="regenerate">换一座迷宫 ↗</button></div>
+        <div class="board-toolbar"><span>{{ maze.size }} × {{ maze.size }}<small v-if="maze.edited">已编辑</small></span><div class="view-actions"><button :aria-pressed="observing" @click="observing = !observing">{{ observing ? '正视' : '立体观察' }}</button><button @click="regenerate">换一座迷宫 ↗</button></div></div>
         <div class="paper-stage">
-          <svg ref="mazeElement" class="maze" :class="{ editable: editTool !== 'move' }" :viewBox="`-42 -42 ${boardSize + 84} ${boardSize + 84}`" role="img" aria-label="纸雕迷宫，聚焦后可用方向键或 WASD 移动" tabindex="0" @keydown="onKeydown" @click="editBoard">
+          <OrbitMaze v-if="observing" :maze="maze" :visited="playback.visibleVisited.value" :path="playback.visiblePath.value" :player="player" @exit="returnToBoard" />
+          <svg v-else ref="mazeElement" class="maze" :class="{ editable: editTool !== 'move' }" :viewBox="`-42 -42 ${boardSize + 84} ${boardSize + 84}`" role="img" aria-label="纸雕迷宫，聚焦后可用方向键或 WASD 移动" tabindex="0" @keydown="onKeydown" @click="editBoard">
             <PaperLayers :maze="maze" :cell="cell" />
             <g class="trace" pointer-events="none">
               <circle v-for="point in playback.visibleVisited.value" :key="pointKey(point)" :cx="(point.col + .5) * cell" :cy="(point.row + .5) * cell" r="2.4" class="visited"/>
@@ -189,7 +204,7 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
         </section>
         <section class="control-section">
           <h2>探索</h2>
-          <div class="tool-row" role="toolbar" aria-label="迷宫编辑工具"><button v-for="tool in (['move','wall','passage','start','goal'] as const)" :key="tool" :disabled="playbackBusy" :class="{ active: editTool === tool }" :aria-pressed="editTool === tool" @click="editTool = tool">{{ { move:'移动', wall:'画墙', passage:'擦除', start:'起点', goal:'终点' }[tool] }}</button></div>
+          <div class="tool-row" role="toolbar" aria-label="迷宫编辑工具"><button v-for="tool in (['move','wall','passage','start','goal'] as const)" :key="tool" :disabled="playbackBusy" :class="{ active: editTool === tool }" :aria-pressed="editTool === tool" @click="chooseTool(tool)">{{ { move:'移动', wall:'画墙', passage:'擦除', start:'起点', goal:'终点' }[tool] }}</button></div>
           <div class="manual-controls"><div class="dpad" aria-label="方向控制"><button class="up" aria-label="向上" @click="move('up')">↑</button><button class="left" aria-label="向左" @click="move('left')">←</button><button class="down" aria-label="向下" @click="move('down')">↓</button><button class="right" aria-label="向右" @click="move('right')">→</button></div><div class="manual-metrics"><strong>{{ manualPath.length - 1 }}<small> 步</small></strong><span v-if="manualElapsedMs !== null">{{ (manualElapsedMs / 1000).toFixed(1) }} s</span></div></div>
         </section>
         <details class="help"><summary>操作说明</summary><p>点击地图后，用方向键或 WASD 移动。选择编辑工具，再点击对应格子。</p><div class="legend"><span>○ 起点</span><span>◆ 终点</span><span>● 玩家</span></div><p>点为访问轨迹，线为最终路径。耗时仅计算搜索，不含播放与保存。</p></details>
