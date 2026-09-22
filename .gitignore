@@ -1,0 +1,16 @@
+# Local planning and research artifacts; do not publish to the project repository.
+/PROJECT_PLAN.md
+/docs/RESEARCH_AND_DECISIONS.md
+/docs/archive/
+/.research-tmp/
+
+# Local development artifacts.
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+.env
+*.db
+*.sqlite
+*.sqlite3
