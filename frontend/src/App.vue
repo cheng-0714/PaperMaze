@@ -53,11 +53,13 @@ function loadChallenge() {
 async function copyChallenge() { await navigator.clipboard.writeText(challengeCode.value); status.value = "挑战码已复制"; }
 
 async function persist(run: Run) {
+  const retrying = saveState.value === "error";
   pendingRun.value = run; saveState.value = "saving";
   try {
     const saved = await createRun(run);
     await refreshHistory();
     saveState.value = "saved"; pendingRun.value = null;
+    if (retrying) status.value = "运行结果已重新保存";
   } catch (error) {
     saveState.value = "error";
     status.value = `运行完成，但保存失败：${error instanceof Error ? error.message : "未知错误"}`;
@@ -94,8 +96,13 @@ function switchResult(algorithm: SearchAlgorithm) {
 
 function editBoard(event: MouseEvent) {
   if (editTool.value === "move" || playbackBusy.value) return;
-  const bounds = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
-  const point = { row: Math.floor(((event.clientY - bounds.top) / bounds.height) * maze.value.size), col: Math.floor(((event.clientX - bounds.left) / bounds.width) * maze.value.size) };
+  const svg = event.currentTarget as SVGSVGElement;
+  const matrix = svg.getScreenCTM();
+  if (!matrix) { status.value = "暂时无法定位点击位置"; return; }
+  const cursor = svg.createSVGPoint();
+  cursor.x = event.clientX; cursor.y = event.clientY;
+  const logical = cursor.matrixTransform(matrix.inverse());
+  const point = { row: Math.floor(logical.y / cell), col: Math.floor(logical.x / cell) };
   if (editTool.value === "wall" && same(point, player.value)) { status.value = "不能在玩家当前位置放置墙体"; return; }
   const edited = applyEdit(maze.value, editTool.value, point);
   if (edited.error) { status.value = edited.error === "border" ? "外边框必须保持封闭" : edited.error === "wall" ? "起点和终点只能放在通路格" : "起点与终点不能重合或被墙覆盖"; return; }
