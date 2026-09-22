@@ -15,3 +15,5 @@ dist/
 *.db
 *.sqlite
 *.sqlite3
+
+*.tsbuildinfo
