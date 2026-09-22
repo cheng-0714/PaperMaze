@@ -12,7 +12,8 @@ export type Maze = Readonly<{
   cells: ReadonlyArray<ReadonlyArray<Cell>>;
 }>;
 
-export const SUPPORTED_SIZES = [11, 21, 31] as const;
+export const SUPPORTED_SIZES = [11, 21, 31, 41, 51] as const;
+export type MazeSize = (typeof SUPPORTED_SIZES)[number];
 export type EditTool = "wall" | "passage" | "start" | "goal";
 export const pointKey = (point: Point) => `${point.row},${point.col}`;
 export const samePoint = (a: Point, b: Point) => a.row === b.row && a.col === b.col;
@@ -26,7 +27,7 @@ const mulberry32 = (seed: number) => () => {
 
 export function generateMaze(size: number, seed: number): Maze {
   if (!SUPPORTED_SIZES.includes(size as (typeof SUPPORTED_SIZES)[number])) {
-    throw new Error("Maze size must be 11, 21, or 31.");
+    throw new Error("Unsupported maze size.");
   }
   if (!Number.isInteger(seed) || seed < 1 || seed > 0xffffffff) {
     throw new Error("Seed must be an integer from 1 to 4294967295.");
@@ -116,10 +117,12 @@ export function applyEdit(maze: Maze, tool: EditTool, point: Point): { maze: Maz
 
 export const toChallengeCode = (maze: Maze) => `PM${maze.generatorVersion}-${maze.size}-${maze.seed}`;
 
-export function parseChallengeCode(code: string): { size: 11 | 21 | 31; seed: number } | null {
-  const match = /^PM1-(11|21|31)-([1-9]\d*)$/.exec(code.trim().toUpperCase());
+export function parseChallengeCode(code: string): { size: MazeSize; seed: number } | null {
+  const match = /^PM1-(\d+)-([1-9]\d*)$/.exec(code.trim().toUpperCase());
   if (!match) return null;
+  const size = Number(match[1]) as MazeSize;
+  if (!SUPPORTED_SIZES.includes(size)) return null;
   const seed = Number(match[2]);
   if (!Number.isInteger(seed) || seed > 0xffffffff) return null;
-  return { size: Number(match[1]) as 11 | 21 | 31, seed };
+  return { size, seed };
 }

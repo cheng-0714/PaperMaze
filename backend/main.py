@@ -17,7 +17,7 @@ class Point(BaseModel):
 
 
 class MazeSnapshot(BaseModel):
-    size: Literal[11, 21, 31]
+    size: Literal[11, 21, 31, 41, 51]
     seed: int = Field(ge=1, le=4_294_967_295)
     generatorVersion: Literal[1]
     edited: bool
@@ -45,7 +45,7 @@ class RunCreate(BaseModel):
     maze: MazeSnapshot
     found: bool
     path: list[Point] = Field(max_length=10_000)
-    visitedOrder: list[Point] | None = Field(max_length=961)
+    visitedOrder: list[Point] | None = Field(max_length=2601)
     computeMs: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     manualElapsedMs: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 

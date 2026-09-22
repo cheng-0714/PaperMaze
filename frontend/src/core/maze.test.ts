@@ -4,14 +4,17 @@ import { searchMaze } from "./search";
 
 describe("maze", () => {
   it("recreates the same connected maze from a seed", () => {
-    for (const size of [11, 21, 31] as const) {
+    for (const size of [11, 21, 31, 41, 51] as const) {
       const first = generateMaze(size, 12345);
       const second = generateMaze(size, 12345);
       expect(first).toEqual(second);
       expect(first.cells[first.start.row]?.[first.start.col]).toBe(0);
       expect(first.cells[first.goal.row]?.[first.goal.col]).toBe(0);
       expect(first.start).not.toEqual(first.goal);
-      expect(searchMaze(first, "bfs").found).toBe(true);
+      const bfs = searchMaze(first, "bfs");
+      expect(bfs.found).toBe(true);
+      expect(searchMaze(first, "astar").path.length).toBe(bfs.path.length);
+      expect(parseChallengeCode(toChallengeCode(first))).toEqual({ size, seed: 12345 });
     }
   });
 

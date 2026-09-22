@@ -1,6 +1,22 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from backend.main import create_app
+
+
+@pytest.mark.parametrize("size", [41, 51])
+def test_large_edited_map_and_long_trace_survive_restart(tmp_path, size):
+    run = search_run("large")
+    cells = [[1 if r in (0, size - 1) or c in (0, size - 1) else 0 for c in range(size)] for r in range(size)]
+    run["maze"].update(size=size, cells=cells, edited=True)
+    run["visitedOrder"] = [{"row": r, "col": c} for r in range(1, size - 1) for c in range(1, size - 1)]
+    database = tmp_path / "large.sqlite3"
+    with TestClient(create_app(database)) as client:
+        assert client.post("/api/runs", json=run).status_code == 201
+    with TestClient(create_app(database)) as client:
+        restored = client.get("/api/runs/large").json()
+        assert restored["maze"] == run["maze"]
+        assert restored["visitedOrder"] == run["visitedOrder"]
 
 
 def manual_run(run_id: str = "run-1") -> dict:

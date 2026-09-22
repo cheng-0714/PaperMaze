@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { createRun, deleteRun, getRun, listRuns, type Run, type RunSummary } from "./api";
-import { applyEdit, generateMaze, movePlayer, parseChallengeCode, pointKey, samePoint as same, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
+import { SUPPORTED_SIZES, type MazeSize, applyEdit, generateMaze, movePlayer, parseChallengeCode, pointKey, samePoint as same, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
 import { searchMaze, validatePath, type SearchAlgorithm, type SearchResult } from "./core/search";
 import PaperLayers from "./PaperLayers.vue";
 import OrbitMaze from "./OrbitMaze.vue";
 import { usePlayback } from "./usePlayback";
 
 const newSeed = () => Math.floor(Math.random() * 0xffffffff) + 1;
-const selectedSize = ref<11 | 21 | 31>(21);
+const selectedSize = ref<MazeSize>(21);
 const observing = ref(false);
 const showSettings = ref(false);
 const showHistory = ref(false);
@@ -128,7 +128,7 @@ function editBoard(event: MouseEvent) {
 async function refreshHistory() { history.value = (await listRuns(historyFilter.value === "all" ? undefined : historyFilter.value)).items; }
 async function restoreRun(id: string) {
   const run = await getRun(id);
-  showHistory.value = false; maze.value = run.maze; selectedSize.value = run.maze.size as 11 | 21 | 31; seedInput.value = run.maze.seed;
+  showHistory.value = false; maze.value = run.maze; selectedSize.value = run.maze.size as MazeSize; seedInput.value = run.maze.seed;
   clearRunState("已恢复历史快照");
   if (run.mode !== "manual" && run.visitedOrder) {
     const result = { found: run.found, path: run.path, visitedOrder: run.visitedOrder, computeMs: run.computeMs ?? 0 };
@@ -159,7 +159,7 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
     </header>
 
     <section v-if="showSettings" class="settings" aria-label="迷宫设置">
-      <label>尺寸<select v-model.number="selectedSize"><option :value="11">11 × 11</option><option :value="21">21 × 21</option><option :value="31">31 × 31</option></select></label>
+      <label>尺寸<select v-model.number="selectedSize"><option v-for="size in SUPPORTED_SIZES" :key="size" :value="size">{{ size }} × {{ size }}</option></select></label>
       <label>种子<input v-model.number="seedInput" type="number" min="1" max="4294967295" /></label>
       <button @click="buildMaze()">生成</button>
       <div class="challenge"><code>{{ challengeCode }}</code><button @click="copyChallenge">复制</button><small v-if="maze.edited">仅复现原始地图</small></div>
@@ -200,7 +200,7 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
               <b>{{ algorithm === 'astar' ? 'A*' : 'BFS' }}</b><span>{{ !results[algorithm] ? '未运行' : results[algorithm]?.found === false ? '无解' : `${results[algorithm]!.path.length - 1} 步` }}</span><small v-if="results[algorithm]">{{ results[algorithm]!.visitedOrder.length }} 访问<br>{{ results[algorithm]!.computeMs.toFixed(2) }} ms</small>
             </button>
           </div>
-          <div v-if="playback.total.value" class="playback-controls"><button @click="playback.play()">{{ playbackBusy && !playback.playing.value ? '继续' : '重放' }}</button><button :disabled="!playback.playing.value" @click="playback.pause">暂停</button><select v-model.number="playback.speed.value" aria-label="播放速度"><option :value=".5">0.5×</option><option :value="1">1×</option><option :value="2">2×</option></select></div>
+          <div v-if="playback.total.value" class="playback-controls"><button @click="playback.play()">{{ playbackBusy && !playback.playing.value ? '继续' : '重放' }}</button><button :disabled="!playback.playing.value" @click="playback.pause">暂停</button><label class="speed-control"><input v-model.number="playback.speed.value" type="range" min="0.5" max="5" step="0.5" aria-label="播放速度" :aria-valuetext="`${playback.speed.value} 倍速`" /><output>{{ playback.speed.value }}×</output></label></div>
         </section>
         <section class="control-section">
           <h2>探索</h2>
