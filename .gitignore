@@ -3,6 +3,7 @@
 /docs/RESEARCH_AND_DECISIONS.md
 /docs/archive/
 /.research-tmp/
+/.scratch/
 
 # Local development artifacts.
 .venv/

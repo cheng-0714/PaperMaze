@@ -23,7 +23,7 @@ PaperMaze is a course project for generating mazes, exploring them manually, and
 
 ### Issue tracker
 
-Specifications and implementation tickets are tracked in GitHub Issues for `cheng-0714/PaperMaze`. See `docs/agents/issue-tracker.md`.
+Specifications and implementation tickets are kept as local Markdown under `.scratch/` and are not published automatically. See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

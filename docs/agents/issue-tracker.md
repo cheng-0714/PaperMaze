@@ -1,23 +1,18 @@
-# Issue tracker GitHub
+# Issue tracker Local Markdown
 
-Issues and specifications for this repository live in GitHub Issues at `cheng-0714/PaperMaze`. Use the GitHub CLI for tracker operations.
+Specifications and tickets for this repository stay local under `.scratch/`. Do not create GitHub Issues or pull requests, and do not push commits unless the user explicitly requests it after review.
 
 ## Conventions
 
-- Create an issue with `gh issue create --title "..." --body-file <file>`.
-- Read an issue with `gh issue view <number> --comments` and include its labels when relevant.
-- List issues with `gh issue list` using explicit state and JSON fields.
-- Comment with `gh issue comment <number> --body-file <file>`.
-- Close with `gh issue close <number>` after the acceptance criteria are met.
-- Infer the repository from the configured `origin` remote.
-
-## Pull requests as a request surface
-
-PRs as a request surface: no.
+- One effort per directory: `.scratch/<feature-slug>/`.
+- The specification is `.scratch/<feature-slug>/spec.md`.
+- Tickets are separate files under `.scratch/<feature-slug>/issues/`, numbered in dependency order.
+- Each ticket records its status and blockers near the top.
+- A ticket is unblocked when all listed blocker tickets are complete.
 
 ## Skill operations
 
-- When a skill says to publish a specification or ticket, create a GitHub Issue.
-- When a skill says to fetch a ticket, read the referenced GitHub Issue and its comments.
-- Use GitHub issue dependencies when available. If unavailable, add a `Blocked by: #<number>` line to the child issue.
-- Claim implementation work by assigning the issue to the authenticated user, then close it only after validation succeeds.
+- Publishing a specification means writing its local Markdown file.
+- Publishing tickets means writing one local Markdown file per ticket.
+- Fetching a ticket means reading its referenced local file.
+- Local workflow files are intentionally ignored by Git.
