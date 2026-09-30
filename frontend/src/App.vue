@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { createRun, deleteRun, getRun, listRuns, type Run, type RunSummary } from "./api";
 import { SUPPORTED_SIZES, type MazeSize, applyEdit, generateMaze, movePlayer, parseChallengeCode, pointKey, samePoint as same, toChallengeCode, type Direction, type EditTool, type Point } from "./core/maze";
 import { searchMaze, validatePath, type SearchAlgorithm, type SearchResult } from "./core/search";
+import { analyzeMaze, manualMetrics } from "./core/analysis";
 import PaperLayers from "./PaperLayers.vue";
 import { usePlayback } from "./usePlayback";
 
@@ -15,6 +16,10 @@ const maze = ref(generateMaze(selectedSize.value, seedInput.value));
 const player = ref<Point>(maze.value.start);
 const manualPath = ref<Point[]>([maze.value.start]);
 const manualElapsedMs = ref<number | null>(null);
+const collisionCount = ref<number | null>(0);
+const wallCollisionCount = ref<number | null>(0);
+const boundaryCollisionCount = ref<number | null>(0);
+const manualCompleted = ref(false);
 const startedAt = ref<number | null>(null);
 const status = ref("点击迷宫，方向键移动");
 const saveState = ref<"idle" | "saving" | "saved" | "error">("idle");
@@ -28,15 +33,25 @@ const challengeInput = ref("");
 const playback = usePlayback();
 const mazeElement = ref<SVGSVGElement | null>(null);
 const cell = 24;
+const showHeatmap = ref(false);
+const aiText = ref("");
+const aiSource = ref<"local" | "deepseek" | "">("");
+const aiLoading = ref(false);
 
 const boardSize = computed(() => maze.value.size * cell);
 const challengeCode = computed(() => toChallengeCode(maze.value));
 const pathLine = computed(() => playback.visiblePath.value.map(p => `${(p.col + .5) * cell},${(p.row + .5) * cell}`).join(" "));
 const playbackBusy = computed(() => playback.total.value > 0 && playback.cursor.value < playback.total.value);
+const structure = computed(() => analyzeMaze(maze.value));
+const challengeMetrics = computed(() => { const metrics = manualMetrics(manualPath.value, structure.value.shortestPathLength, structure.value.reachablePassages, collisionCount.value ?? 0, manualElapsedMs.value); return manualCompleted.value ? metrics : { ...metrics, detourRate: null, efficiency: null, badge: "进行中" }; });
+const heatmapCells = computed(() => structure.value.distanceField.flatMap((row, r) => row.map((distance, c) => ({ row: r, col: c, distance })).filter((item) => item.distance !== null)));
+const comparisonPaths = computed(() => (['bfs', 'astar'] as const).map((algorithm) => ({ algorithm, result: results.value[algorithm] })).filter((entry) => entry.result?.found));
+const comparisonVisited = computed(() => (['bfs', 'astar'] as const).flatMap((algorithm) => (results.value[algorithm]?.visitedOrder ?? []).map((point) => ({ algorithm, point }))));
 
 function clearRunState(message: string) {
   playback.cancel(); results.value = {}; activeAlgorithm.value = null;
-  player.value = maze.value.start; manualPath.value = [maze.value.start]; startedAt.value = null; manualElapsedMs.value = null;
+  player.value = maze.value.start; manualPath.value = [maze.value.start]; startedAt.value = null; manualElapsedMs.value = null; collisionCount.value = 0; wallCollisionCount.value = 0; boundaryCollisionCount.value = 0; manualCompleted.value = false; showHeatmap.value = false;
+  aiText.value = ""; aiSource.value = "";
   saveState.value = "idle"; pendingRun.value = null; status.value = message;
 }
 
@@ -69,19 +84,20 @@ async function persist(run: Run) {
 }
 
 function move(direction: Direction) {
-  if (editTool.value !== "move" || same(player.value, maze.value.goal)) return;
+  if (editTool.value !== "move" || same(player.value, maze.value.goal) || playbackBusy.value) return;
   const result = movePlayer(maze.value, player.value, direction);
-  if (result.blocked) { status.value = result.blocked === "wall" ? "前方是墙" : "已经到达边界"; return; }
+  if (result.blocked) { collisionCount.value = (collisionCount.value ?? 0) + 1; if (result.blocked === "wall") wallCollisionCount.value = (wallCollisionCount.value ?? 0) + 1; else boundaryCollisionCount.value = (boundaryCollisionCount.value ?? 0) + 1; status.value = result.blocked === "wall" ? "前方是墙" : "已经到达边界"; return; }
   if (startedAt.value === null) startedAt.value = performance.now();
   player.value = result.position; manualPath.value = [...manualPath.value, result.position]; status.value = "继续前进";
   if (same(result.position, maze.value.goal)) {
-    const elapsed = performance.now() - startedAt.value!; manualElapsedMs.value = elapsed; status.value = `抵达终点，共 ${manualPath.value.length - 1} 步，用时 ${(elapsed / 1000).toFixed(1)} 秒`;
-    void persist({ id: crypto.randomUUID(), schemaVersion: 1, mode: "manual", maze: maze.value, found: true, path: manualPath.value, visitedOrder: null, computeMs: null, manualElapsedMs: elapsed });
+    const elapsed = performance.now() - startedAt.value!; manualElapsedMs.value = elapsed; manualCompleted.value = true; status.value = `抵达终点，共 ${manualPath.value.length - 1} 步，用时 ${(elapsed / 1000).toFixed(1)} 秒`;
+    void persist({ id: crypto.randomUUID(), schemaVersion: 1, mode: "manual", maze: maze.value, found: true, path: manualPath.value, visitedOrder: null, computeMs: null, manualElapsedMs: elapsed, collisionCount: collisionCount.value, wallCollisionCount: wallCollisionCount.value, boundaryCollisionCount: boundaryCollisionCount.value });
   }
 }
 
 function runSearch(algorithm: SearchAlgorithm) {
-  if (playbackBusy.value) return;
+  if (results.value[algorithm]) { activeAlgorithm.value = algorithm; playback.play(results.value[algorithm]!); return; }
+  if (playbackBusy.value) playback.cancel();
   const result = searchMaze(maze.value, algorithm);
   if (result.found && !validatePath(maze.value, result.path)) {
     status.value = `${algorithm.toUpperCase()} 返回了非法路径，结果未保存`;
@@ -122,10 +138,26 @@ async function restoreRun(id: string) {
   } else if (run.mode === "manual") {
     manualPath.value = run.path;
     player.value = run.path[run.path.length - 1] ?? run.maze.start;
-    manualElapsedMs.value = run.manualElapsedMs;
+    manualElapsedMs.value = run.manualElapsedMs; collisionCount.value = run.collisionCount ?? null; wallCollisionCount.value = run.wallCollisionCount ?? null; boundaryCollisionCount.value = run.boundaryCollisionCount ?? null; manualCompleted.value = true;
     playback.play({ found: true, path: run.path, visitedOrder: [], computeMs: 0 });
     status.value = `已恢复手动挑战：${run.path.length - 1} 步，用时 ${((run.manualElapsedMs ?? 0) / 1000).toFixed(1)} 秒`;
   }
+}
+async function requestAiExplanation() {
+  aiLoading.value = true;
+  try {
+    const response = await fetch("/api/ai/explain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      mazeSize: maze.value.size, passageRatio: structure.value.passageRatio, deadEnds: structure.value.deadEnds, junctions: structure.value.junctions,
+      shortestPathLength: structure.value.shortestPathLength, manualSteps: manualCompleted.value ? manualPath.value.length - 1 : null,
+      detourRate: challengeMetrics.value.detourRate, bfsVisited: results.value.bfs?.visitedOrder.length ?? null, astarVisited: results.value.astar?.visitedOrder.length ?? null,
+      bfsPathLength: results.value.bfs?.found ? results.value.bfs.path.length - 1 : null, astarPathLength: results.value.astar?.found ? results.value.astar.path.length - 1 : null,
+      bfsCoverage: results.value.bfs ? results.value.bfs.visitedOrder.length / Math.max(1, structure.value.reachablePassages) : null, astarCoverage: results.value.astar ? results.value.astar.visitedOrder.length / Math.max(1, structure.value.reachablePassages) : null,
+    }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "AI 请求失败");
+    aiText.value = data.text; aiSource.value = data.source;
+  } catch (error) { status.value = error instanceof Error ? error.message : "AI 解读失败"; }
+  finally { aiLoading.value = false; }
 }
 async function removeRun(id: string) { await deleteRun(id); history.value = history.value.filter((run) => run.id !== id); status.value = "历史记录已删除"; }
 
@@ -164,7 +196,12 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
         <div class="paper-stage">
           <svg ref="mazeElement" class="maze" :class="{ editable: editTool !== 'move' }" :viewBox="`-42 -42 ${boardSize + 84} ${boardSize + 84}`" role="img" aria-label="纸雕迷宫，聚焦后可用方向键或 WASD 移动" tabindex="0" @keydown="onKeydown" @click="editBoard">
             <PaperLayers :maze="maze" :cell="cell" />
+            <g v-if="showHeatmap" class="heatmap" pointer-events="none">
+              <rect v-for="item in heatmapCells" :key="`heat-${item.row}-${item.col}`" :x="item.col * cell + 2" :y="item.row * cell + 2" :width="cell - 4" :height="cell - 4" :opacity="0.12 + (1 - (item.distance! / Math.max(1, structure.shortestPathLength ?? maze.size * 2))) * 0.5" :class="item.distance === 0 ? 'heat-goal' : 'heat-cell'" />
+            </g>
             <g class="trace" pointer-events="none">
+              <circle v-for="entry in comparisonVisited" :key="`${entry.algorithm}-${pointKey(entry.point)}`" :cx="(entry.point.col + .5) * cell" :cy="(entry.point.row + .5) * cell" r="2.1" :class="`visited-${entry.algorithm}`"/>
+              <polyline v-for="entry in comparisonPaths" :key="`path-${entry.algorithm}`" :points="entry.result!.path.map(p => `${(p.col + .5) * cell},${(p.row + .5) * cell}`).join(' ')" :class="`path-${entry.algorithm}`"/>
               <circle v-for="point in playback.visibleVisited.value" :key="pointKey(point)" :cx="(point.col + .5) * cell" :cy="(point.row + .5) * cell" r="2.4" class="visited"/>
               <polyline v-if="pathLine" :points="pathLine" class="path"/>
               <circle :cx="(maze.start.col + .5) * cell" :cy="(maze.start.row + .5) * cell" r="7" class="start"/>
@@ -179,13 +216,22 @@ onMounted(async () => { try { await refreshHistory(); } catch { status.value = "
       <aside class="side-panel">
         <section class="control-section">
           <h2>寻路</h2>
-          <div class="button-row"><button class="primary" :disabled="playbackBusy" @click="runSearch('bfs')">BFS<span aria-hidden="true">↗</span></button><button class="primary" :disabled="playbackBusy" @click="runSearch('astar')">A*<span aria-hidden="true">↗</span></button></div>
+          <div class="button-row"><button class="primary" @click="runSearch('bfs')">BFS<span aria-hidden="true">↗</span></button><button class="primary" @click="runSearch('astar')">A*<span aria-hidden="true">↗</span></button></div>
           <div v-if="results.bfs || results.astar" class="result-list">
             <button v-for="algorithm in (['bfs','astar'] as const)" :key="algorithm" class="result-row" :class="{ active: activeAlgorithm === algorithm }" :disabled="!results[algorithm]" @click="switchResult(algorithm)">
-              <b>{{ algorithm === 'astar' ? 'A*' : 'BFS' }}</b><span>{{ !results[algorithm] ? '未运行' : results[algorithm]?.found === false ? '无解' : `${results[algorithm]!.path.length - 1} 步` }}</span><small v-if="results[algorithm]">{{ results[algorithm]!.visitedOrder.length }} 访问<br>{{ results[algorithm]!.computeMs.toFixed(2) }} ms</small>
+              <b>{{ algorithm === 'astar' ? 'A*' : 'BFS' }}</b><span>{{ !results[algorithm] ? '未运行' : results[algorithm]?.found === false ? '无解' : `${results[algorithm]!.path.length - 1} 步` }}</span><small v-if="results[algorithm]">{{ results[algorithm]!.visitedOrder.length }} 访问 · {{ (results[algorithm]!.visitedOrder.length / Math.max(1, structure.reachablePassages) * 100).toFixed(0) }}% 覆盖<br>{{ results[algorithm]!.computeMs.toFixed(2) }} ms</small>
             </button>
           </div>
+          <p v-if="results.bfs && results.astar" class="compare-note">同图对比：{{ results.bfs.visitedOrder.length <= results.astar.visitedOrder.length ? 'BFS' : 'A*' }} 访问节点更少</p>
           <div v-if="playback.total.value" class="playback-controls"><button @click="playback.play()">{{ playbackBusy && !playback.playing.value ? '继续' : '重放' }}</button><button :disabled="!playback.playing.value" @click="playback.pause">暂停</button><label class="speed-control"><input v-model.number="playback.speed.value" type="range" min="0.5" max="5" step="0.5" aria-label="播放速度" :aria-valuetext="`${playback.speed.value} 倍速`" /><output>{{ playback.speed.value }}×</output></label></div>
+          <label class="toggle"><input v-model="showHeatmap" type="checkbox" /> 距离热力图</label>
+        </section>
+        <section class="control-section report-section">
+          <h2>实验报告</h2>
+          <div class="report-grid"><span>通路率<strong>{{ (structure.passageRatio * 100).toFixed(0) }}%</strong></span><span>死胡同<strong>{{ structure.deadEnds }}</strong></span><span>分叉<strong>{{ structure.junctions }}</strong></span><span>最短距离<strong>{{ structure.shortestPathLength ?? '—' }}</strong></span><span>手动步数<strong>{{ challengeMetrics.manualSteps }}</strong></span><span>撞墙 / 越界<strong>{{ wallCollisionCount ?? '—' }} / {{ boundaryCollisionCount ?? '—' }}</strong></span><span>绕路率<strong>{{ challengeMetrics.detourRate === null ? '—' : `${(challengeMetrics.detourRate * 100).toFixed(0)}%` }}</strong></span><span>路线效率<strong>{{ challengeMetrics.efficiency === null ? '—' : `${(challengeMetrics.efficiency * 100).toFixed(0)}%` }}</strong></span></div>
+          <p class="report-label">{{ structure.curvature }} · {{ structure.exploration }} · {{ challengeMetrics.badge }}</p>
+          <button class="ai-button" :disabled="aiLoading" @click="requestAiExplanation">{{ aiLoading ? '解读中…' : '生成 AI 解读' }}</button>
+          <p v-if="aiText" class="ai-text">{{ aiText }}<small>{{ aiSource === 'deepseek' ? 'DeepSeek' : '本地规则' }}</small></p>
         </section>
         <section class="control-section">
           <h2>探索</h2>

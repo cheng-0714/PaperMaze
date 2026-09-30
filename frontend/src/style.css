@@ -36,7 +36,13 @@ nav button[aria-expanded=true] { color: var(--accent); text-decoration: underlin
 .maze:focus-visible { outline: 1px solid #739b86; outline-offset: 12px; }
 .maze.editable { cursor: crosshair; }
 .visited { fill: #b6dbb9; opacity: .85; }
+.visited-bfs { fill: #7eb6d8; opacity: .45; }
+.visited-astar { fill: #d79c72; opacity: .45; }
 .path { fill: none; stroke: #f3c474; stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.path-bfs { fill: none; stroke: #4e9ac6; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; opacity: .8; }
+.path-astar { fill: none; stroke: #d17b4a; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; opacity: .8; }
+.heat-cell { fill: #d7a96e; }
+.heat-goal { fill: #f3c474; opacity: .8; }
 .start { fill: none; stroke: #faf6d9; stroke-width: 1.8; }
 .goal { fill: #f3c474; stroke: #fff1c5; stroke-width: 1; }
 .player { fill: #fff7e3; stroke: #254c45; stroke-width: 1.2; filter: drop-shadow(1px 2px 1px #0a2b29aa); }
@@ -82,6 +88,16 @@ button.primary:hover:not(:disabled) { color: var(--accent); }
 .speed-control { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .speed-control input { width: 100%; min-width: 0; padding: 0; accent-color: var(--accent); border: 0; }
 .speed-control output { min-width: 28px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.toggle { display: flex; gap: 8px; align-items: center; margin-top: 16px; color: var(--muted); font-size: 11px; }
+.toggle input { accent-color: var(--accent); }
+.report-section { border-top: 1px solid var(--line); padding-top: 22px; }
+.report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+.report-grid span { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
+.report-grid strong { color: var(--ink); font-size: 16px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.report-label { color: var(--muted); font-size: 11px; margin: 18px 0 8px; }
+.ai-button { font-size: 11px; color: var(--accent); }
+.ai-text { margin: 10px 0 0; font-size: 11px; line-height: 1.7; color: var(--ink); }
+.ai-text small { display: block; color: var(--muted); margin-top: 5px; }
 input, select { border: 0; border-bottom: 1px solid var(--line); background: transparent; border-radius: 0; padding: 8px 0; color: var(--ink); min-width: 0; }
 .settings { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 24px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .settings label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }

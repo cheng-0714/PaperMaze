@@ -12,6 +12,9 @@ export type Run = {
   visitedOrder: Point[] | null;
   computeMs: number | null;
   manualElapsedMs: number | null;
+  collisionCount?: number | null;
+  wallCollisionCount?: number | null;
+  boundaryCollisionCount?: number | null;
   createdAt?: string;
   pathLength?: number | null;
   visitedCount?: number | null;

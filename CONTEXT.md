@@ -61,3 +61,23 @@ The saved collection of completed runs. Each entry retains its maze snapshot so 
 ### Challenge code
 
 The generator version, supported size, and seed needed to recreate a generated maze. It does not reproduce later user edits.
+
+### Experiment report
+
+A derived view of one maze snapshot and its completed manual, BFS, or A* runs. It summarizes challenge performance, maze structure, and algorithm comparison without replacing the underlying run records.
+
+### Challenge metrics
+
+The measured result of a manual run: legal step count, blocked move count, elapsed time, and comparison with the shortest available search path. An unfinished attempt has no completed challenge metrics.
+
+### Structure analysis
+
+Deterministic measurements derived from a maze snapshot, including passage ratio, dead ends, junctions, and the shortest distance from start to goal. These measurements describe the map and do not claim a universal difficulty score.
+
+### Distance field
+
+A mapping from each reachable passage cell to its shortest number of steps to the goal. Walls and cells unreachable from the goal have no distance value; the field can drive a visual heatmap.
+
+### AI explanation
+
+Optional prose generated from bounded experiment metrics to explain the observed BFS/A* and manual results. It is an interpretation layer, not an authoritative algorithm result or part of the maze snapshot.

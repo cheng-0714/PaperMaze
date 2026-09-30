@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 from typing import Literal
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,6 +50,9 @@ class RunCreate(BaseModel):
     visitedOrder: list[Point] | None = Field(max_length=2601)
     computeMs: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     manualElapsedMs: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    collisionCount: int | None = Field(default=None, ge=0, le=100_000)
+    wallCollisionCount: int | None = Field(default=None, ge=0, le=100_000)
+    boundaryCollisionCount: int | None = Field(default=None, ge=0, le=100_000)
 
     @model_validator(mode="after")
     def valid_run(self):
@@ -66,8 +71,11 @@ class RunCreate(BaseModel):
         if self.mode == "manual":
             if not self.found or self.visitedOrder is not None or self.computeMs is not None or self.manualElapsedMs is None:
                 raise ValueError("manual metrics are inconsistent")
+            fields = (self.collisionCount, self.wallCollisionCount, self.boundaryCollisionCount)
+            if any(value is not None for value in fields) and (any(value is None for value in fields) or self.collisionCount != self.wallCollisionCount + self.boundaryCollisionCount):
+                raise ValueError("manual collision fields must be complete")
         else:
-            if self.visitedOrder is None or self.computeMs is None or self.manualElapsedMs is not None:
+            if self.visitedOrder is None or self.computeMs is None or self.manualElapsedMs is not None or self.collisionCount is not None or self.wallCollisionCount is not None or self.boundaryCollisionCount is not None:
                 raise ValueError("search metrics are inconsistent")
             for point in self.visitedOrder:
                 if point.row >= self.maze.size or point.col >= self.maze.size or self.maze.cells[point.row][point.col] != 0:
@@ -81,6 +89,35 @@ class RunCreate(BaseModel):
         return self
 
 
+class ReportSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mazeSize: int = Field(ge=1, le=51)
+    passageRatio: float = Field(ge=0, le=1)
+    deadEnds: int = Field(ge=0, le=2601)
+    junctions: int = Field(ge=0, le=2601)
+    shortestPathLength: int | None = Field(default=None, ge=0, le=10_000)
+    manualSteps: int | None = Field(default=None, ge=0, le=10_000)
+    detourRate: float | None = Field(default=None, ge=0)
+    bfsVisited: int | None = Field(default=None, ge=0, le=2601)
+    astarVisited: int | None = Field(default=None, ge=0, le=2601)
+    bfsPathLength: int | None = Field(default=None, ge=0, le=10_000)
+    astarPathLength: int | None = Field(default=None, ge=0, le=10_000)
+    bfsCoverage: float | None = Field(default=None, ge=0, le=1)
+    astarCoverage: float | None = Field(default=None, ge=0, le=1)
+
+
+def local_explanation(summary: ReportSummary) -> str:
+    shortest = "暂无可达终点" if summary.shortestPathLength is None else f"起终点最短距离为 {summary.shortestPathLength} 步"
+    compare = "尚未完成 BFS/A* 对比"
+    if summary.bfsVisited is not None and summary.astarVisited is not None:
+        compare = f"BFS 访问 {summary.bfsVisited} 个节点，A* 访问 {summary.astarVisited} 个节点；两者都以同一张地图为输入。"
+    manual = "手动挑战尚未完成"
+    if summary.manualSteps is not None:
+        detour = "无法计算绕路率" if summary.detourRate is None else f"绕路率为 {summary.detourRate:.0%}"
+        manual = f"手动路线走了 {summary.manualSteps} 步，{detour}。"
+    return f"这是一张 {summary.mazeSize}×{summary.mazeSize} 的纸雕迷宫，通路率约 {summary.passageRatio:.0%}，有 {summary.deadEnds} 个死胡同和 {summary.junctions} 个分叉。{shortest}。{manual}{compare}"
+
+
 def create_app(database: Path | str = Path("papermaze.sqlite3")) -> FastAPI:
     database_path = Path(database)
 
@@ -90,6 +127,33 @@ def create_app(database: Path | str = Path("papermaze.sqlite3")) -> FastAPI:
         yield
 
     app = FastAPI(title="PaperMaze API", lifespan=lifespan)
+
+    @app.post("/api/ai/explain")
+    def explain(summary: ReportSummary):
+        fallback = local_explanation(summary)
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            return {"text": fallback, "source": "local", "message": "未配置 DeepSeek，已使用本地解读"}
+        payload = {
+            "model": os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
+            "stream": False,
+            "thinking": {"type": "disabled"},
+            "max_tokens": 280,
+            "messages": [
+                {"role": "system", "content": "你是课程项目演示助手。只根据给定数字，用简洁中文解释 BFS、A* 和迷宫结构，不编造数字，不提出代码修改。"},
+                {"role": "user", "content": summary.model_dump_json()},
+            ],
+        }
+        try:
+            response = httpx.post("https://api.deepseek.com/chat/completions", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload, timeout=8.0)
+            if response.status_code >= 400:
+                raise httpx.HTTPError(f"DeepSeek returned {response.status_code}")
+            content = response.json().get("choices", [{}])[0].get("message", {}).get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("empty response")
+            return {"text": content.strip(), "source": "deepseek", "message": ""}
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+            return {"text": fallback, "source": "local", "message": "DeepSeek 暂不可用，已使用本地解读"}
 
     @app.post("/api/runs")
     def create_run(run: RunCreate):

@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 import pytest
+import httpx
 
 from backend.main import create_app
 
@@ -41,6 +42,9 @@ def manual_run(run_id: str = "run-1") -> dict:
         "visitedOrder": None,
         "computeMs": None,
         "manualElapsedMs": 250.0,
+        "collisionCount": 0,
+        "wallCollisionCount": 0,
+        "boundaryCollisionCount": 0,
     }
 
 
@@ -53,6 +57,9 @@ def search_run(run_id: str = "search-1", found: bool = True) -> dict:
         "visitedOrder": [{"row": 1, "col": 1}, {"row": 1, "col": 2}],
         "computeMs": 0.25,
         "manualElapsedMs": None,
+        "collisionCount": None,
+        "wallCollisionCount": None,
+        "boundaryCollisionCount": None,
     })
     if not found:
         run["maze"]["cells"][1][2] = 1
@@ -77,6 +84,17 @@ def test_completed_run_is_retrievable_after_app_restart(tmp_path):
         detail = client.get("/api/runs/run-1")
         assert detail.status_code == 200
         assert detail.json()["maze"]["cells"][1][1:3] == [0, 0]
+
+
+def test_legacy_manual_run_without_collision_fields_remains_readable(tmp_path):
+    legacy = manual_run("legacy")
+    legacy.pop("collisionCount")
+    legacy.pop("wallCollisionCount")
+    legacy.pop("boundaryCollisionCount")
+    with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
+        response = client.post("/api/runs", json=legacy)
+    assert response.status_code == 201
+    assert response.json().get("collisionCount") is None
 
 
 def test_create_is_idempotent_but_rejects_conflicting_id(tmp_path):
@@ -124,3 +142,40 @@ def test_inconsistent_search_trace_is_rejected(tmp_path):
     with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
         response = client.post("/api/runs", json=invalid)
     assert response.status_code == 422
+
+
+def test_ai_explanation_uses_local_fallback_without_key(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
+        response = client.post("/api/ai/explain", json={"mazeSize": 11, "passageRatio": 0.4, "deadEnds": 3, "junctions": 2, "shortestPathLength": 8, "manualSteps": 10, "detourRate": 0.25, "bfsVisited": 20, "astarVisited": 12, "bfsPathLength": 8, "astarPathLength": 8})
+    assert response.status_code == 200
+    assert response.json()["source"] == "local"
+    assert "BFS" in response.json()["text"]
+
+
+def test_ai_explanation_extracts_deepseek_content(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+
+    def fake_post(*args, **kwargs):
+        return httpx.Response(200, json={"choices": [{"message": {"content": "基于数据，A* 探索更集中。"}}]})
+
+    monkeypatch.setattr("backend.main.httpx.post", fake_post)
+    with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
+        response = client.post("/api/ai/explain", json={"mazeSize": 11, "passageRatio": 0.4, "deadEnds": 3, "junctions": 2})
+    assert response.json() == {"text": "基于数据，A* 探索更集中。", "source": "deepseek", "message": ""}
+
+
+def test_ai_explanation_falls_back_on_upstream_timeout(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr("backend.main.httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
+    with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
+        response = client.post("/api/ai/explain", json={"mazeSize": 11, "passageRatio": 0.4, "deadEnds": 3, "junctions": 2})
+    assert response.json()["source"] == "local"
+
+
+def test_ai_explanation_falls_back_on_malformed_upstream_response(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr("backend.main.httpx.post", lambda *args, **kwargs: httpx.Response(200, json={"choices": []}))
+    with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
+        response = client.post("/api/ai/explain", json={"mazeSize": 11, "passageRatio": 0.4, "deadEnds": 3, "junctions": 2})
+    assert response.json()["source"] == "local"
