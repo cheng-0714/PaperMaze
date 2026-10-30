@@ -219,7 +219,8 @@ export function buildAstarTeachingTrace(maze: Maze): AstarTeachingTrace {
 export function replayAstarTeaching(events: readonly AstarTeachingEvent[], cursor = events.length): AstarTeachingState {
   const state: AstarTeachingState = { current: null, frontier: [], visited: [], parents: new Map(), scores: new Map(), completed: false, found: false, path: [] };
   const removeCandidate = (candidate: AstarCandidate) => {
-    const index = state.frontier.findIndex((entry) => key(entry.point) === key(candidate.point) && entry.g === candidate.g);
+    // Match by coordinates only so relax can drop the stale larger-g entry.
+    const index = state.frontier.findIndex((entry) => key(entry.point) === key(candidate.point));
     if (index >= 0) state.frontier.splice(index, 1);
   };
   for (const event of events.slice(0, Math.max(0, Math.min(cursor, events.length)))) {

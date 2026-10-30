@@ -180,3 +180,36 @@ def test_ai_explanation_falls_back_on_malformed_upstream_response(tmp_path, monk
     with TestClient(create_app(tmp_path / "runs.sqlite3")) as client:
         response = client.post("/api/ai/explain", json={"mazeSize": 11, "passageRatio": 0.4, "deadEnds": 3, "junctions": 2})
     assert response.json()["source"] == "local"
+
+
+def test_preupgrade_row_idempotent_retry_without_collision_keys(tmp_path):
+    """Rows written before collision fields existed must still 200 on identical retry."""
+    from backend.storage import get_run, initialize, insert_run
+
+    database_path = tmp_path / "runs.sqlite3"
+    initialize(database_path)
+    legacy = manual_run("legacy-upgrade")
+    legacy.pop("collisionCount")
+    legacy.pop("wallCollisionCount")
+    legacy.pop("boundaryCollisionCount")
+    maze = dict(legacy["maze"])
+    maze.pop("generatorId", None)
+    legacy["maze"] = maze
+    legacy["createdAt"] = "2026-01-01T00:00:00+00:00"
+    legacy["pathLength"] = len(legacy["path"]) - 1
+    legacy["visitedCount"] = None
+    insert_run(database_path, legacy)
+
+    retry_body = manual_run("legacy-upgrade")
+    # Same content as stored after normalization: omit collision fields / use None defaults.
+    retry_body["collisionCount"] = None
+    retry_body["wallCollisionCount"] = None
+    retry_body["boundaryCollisionCount"] = None
+
+    with TestClient(create_app(database_path)) as client:
+        detail = client.get("/api/runs/legacy-upgrade")
+        assert detail.status_code == 200
+        assert "collisionCount" not in detail.json() or detail.json().get("collisionCount") is None
+        repeated = client.post("/api/runs", json=retry_body)
+        assert repeated.status_code == 200
+        assert repeated.json()["id"] == "legacy-upgrade"

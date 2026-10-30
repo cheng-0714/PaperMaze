@@ -35,6 +35,20 @@ export function buildDistanceField(maze: Maze): DistanceField {
   return field;
 }
 
+function countReachableFrom(maze: Maze, origin: Point): number {
+  const seen = new Set<string>([pointKey(origin)]);
+  const queue: Point[] = [origin];
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const next of neighbors(maze, queue[index]!)) {
+      const nextKey = pointKey(next);
+      if (seen.has(nextKey)) continue;
+      seen.add(nextKey);
+      queue.push(next);
+    }
+  }
+  return seen.size;
+}
+
 export function analyzeMaze(maze: Maze): StructureReport {
   let passages = 0;
   let deadEnds = 0;
@@ -48,7 +62,9 @@ export function analyzeMaze(maze: Maze): StructureReport {
   }
   const distanceField = buildDistanceField(maze);
   const shortestPathLength = distanceField[maze.start.row]?.[maze.start.col] ?? null;
-  const reachablePassages = distanceField.flat().filter((value) => value !== null).length;
+  // Coverage / exploration denominators must use the start-connected component
+  // (search visits and manual paths originate at start). Goal BFS stays in distanceField.
+  const reachablePassages = countReachableFrom(maze, maze.start);
   const passageRatio = passages / (maze.size * maze.size);
   const curvature = shortestPathLength === null ? "蜿蜒" : shortestPathLength < maze.size * 0.9 ? "直达" : shortestPathLength < maze.size * 1.8 ? "曲折" : "蜿蜒";
   const junctionRatio = passages ? junctions / passages : 0;
@@ -64,4 +80,3 @@ export function manualMetrics(path: readonly Point[], shortestPathLength: number
   const badge = efficiency === null ? "仍在途中" : efficiency >= 0.95 ? "精敏行者" : efficiency >= 0.75 ? "步履笃定" : "不畏险远";
   return { manualSteps, shortestPathLength, detourRate, efficiency, explorationCoverage, collisionCount, elapsedMs, badge };
 }
-

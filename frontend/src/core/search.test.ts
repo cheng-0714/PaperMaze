@@ -159,6 +159,32 @@ describe("buildBfsTeachingTrace", () => {
 });
 
 describe("buildAstarTeachingTrace", () => {
+  it("drops stale frontier candidates after relaxation on cyclic maps", () => {
+    const input = maze([
+      "11111111111",
+      "10000010101",
+      "11001000101",
+      "11001011011",
+      "10000000001",
+      "10010101001",
+      "10000000111",
+      "10000110101",
+      "10000001011",
+      "10000000001",
+      "11111111111",
+    ].map((row) => Array.from(row, (cell) => Number(cell) as 0 | 1)), { row: 9, col: 9 });
+    const trace = buildAstarTeachingTrace(input);
+    const firstRelax = trace.events.findIndex((event) => event.type === "relax");
+    expect(firstRelax).toBeGreaterThanOrEqual(0);
+    const state = replayAstarTeaching(trace.events, firstRelax + 1);
+    const counts = new Map<string, number>();
+    for (const entry of state.frontier) {
+            const id = `${entry.point.row},${entry.point.col}`;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    expect([...counts.values()].every((count) => count === 1)).toBe(true);
+  });
+
   it("records priority scores and reconstructs the shortest path", () => {
     const input = maze([
       [1, 1, 1, 1, 1],

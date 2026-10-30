@@ -107,6 +107,29 @@ class ReportSummary(BaseModel):
     astarCoverage: float | None = Field(default=None, ge=0, le=1)
 
 
+
+def _normalize_stored_run(existing: dict) -> dict:
+    """Fill missing optional fields so pre-upgrade SQLite rows compare cleanly."""
+    from pydantic_core import PydanticUndefined
+
+    normalized: dict = {}
+    for name, info in RunCreate.model_fields.items():
+        if name == "maze":
+            maze = dict(existing.get("maze") or {})
+            for maze_name, maze_info in MazeSnapshot.model_fields.items():
+                if maze_name not in maze and maze_info.default is not PydanticUndefined:
+                    maze[maze_name] = maze_info.default
+            normalized["maze"] = maze
+            continue
+        if name in existing:
+            normalized[name] = existing[name]
+        elif info.default is not PydanticUndefined:
+            normalized[name] = info.default
+        else:
+            normalized[name] = None
+    return normalized
+
+
 def local_explanation(summary: ReportSummary) -> str:
     shortest = "暂无可达终点" if summary.shortestPathLength is None else f"起终点最短距离为 {summary.shortestPathLength} 步"
     compare = "尚未完成 BFS/A* 对比"
@@ -161,7 +184,7 @@ def create_app(database: Path | str = Path("papermaze.sqlite3")) -> FastAPI:
         existing = get_run(database_path, run.id)
         if existing is not None:
             incoming = run.model_dump()
-            stored_input = {field: existing[field] for field in RunCreate.model_fields}
+            stored_input = _normalize_stored_run(existing)
             if stored_input == incoming:
                 return existing
             raise HTTPException(status_code=409, detail="Run id already exists with different content")

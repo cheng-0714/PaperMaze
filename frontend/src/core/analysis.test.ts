@@ -17,4 +17,13 @@ describe("maze analysis", () => {
     expect(report.shortestPathLength).toBeNull();
     expect(manualMetrics([corridor.start], null, report.reachablePassages, 2, null).detourRate).toBeNull();
   });
+  it("uses start-reachable passages as the coverage denominator on disconnected maps", () => {
+    const cells = Array.from({ length: 11 }, () => Array.from({ length: 11 }, () => 1 as 0 | 1));
+    cells[1]![1] = 0; cells[1]![2] = 0; cells[1]![3] = 0; cells[9]![9] = 0;
+    const report = analyzeMaze({ size: 11, seed: 1, generatorVersion: 1, edited: true, start: { row: 1, col: 1 }, goal: { row: 9, col: 9 }, cells });
+    expect(report.shortestPathLength).toBeNull();
+    expect(report.reachablePassages).toBe(3);
+    expect(report.distanceField[9]?.[9]).toBe(0);
+    expect(3 / Math.max(1, report.reachablePassages)).toBeLessThanOrEqual(1);
+  });
 });
