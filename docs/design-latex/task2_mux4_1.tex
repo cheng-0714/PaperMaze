@@ -1,0 +1,213 @@
+\section{四路多路选择器的设计与仿真}
+
+本节完成实验一的第二项任务。设计一个输入为 4 路、每路宽度为 32 位的四路一选一多路选择器，编写固定激励 Testbench，通过 Vivado 行为级仿真得到 4 组波形、验证四种选择状态，并观察 Vivado 自动生成的 RTL 原理图；代码、仿真代码、波形图和原理图四部分内容均在本节给出。
+
+\subsection{多路选择器设计及源代码}
+
+\subsubsection{实验目的}
+
+四路多路选择器的作用是在 4 路输入数据中，根据 2 位选择信号选出其中一路送到输出。本实验用于掌握组合逻辑模块的 Verilog 描述方法，理解选择信号、数据输入和输出之间的对应关系，并熟悉 Vivado 中独立设计模块的仿真与 RTL 分析流程。
+
+\subsubsection{工作原理}
+
+本实验的多路选择器接收四路 32 位数据输入 \verb|in0|、\verb|in1|、\verb|in2|、\verb|in3|，接收 2 位选择信号 \verb|sel|，输出 32 位数据 \verb|out|。\verb|sel| 有四种有效状态，每种状态唯一对应一路输入。由于输出只由当前输入和选择信号决定，电路不需要时钟和复位信号，属于组合逻辑电路。
+
+\begin{table}[H]
+    \centering
+    \caption{四路多路选择器功能真值表}
+    \label{tab:mux4_truth}
+    \begin{tabular}{c|c|c}
+        \hline
+        选择信号 \verb|sel| & 选中的输入 & 输出 \verb|out| \\
+        \hline
+        \verb|2'b00| & \verb|in0| & \verb|in0| \\
+        \verb|2'b01| & \verb|in1| & \verb|in1| \\
+        \verb|2'b10| & \verb|in2| & \verb|in2| \\
+        \verb|2'b11| & \verb|in3| & \verb|in3| \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\subsubsection{源代码}
+
+四路多路选择器源文件 \verb|mux4_1.v| 如下。代码使用 Verilog-2001 的 \verb|always @(*)| 和完整 \verb|case| 语句描述组合逻辑；\verb|default| 分支为未定义选择状态提供确定值，避免推断锁存器。
+
+\begin{lstlisting}[language=Verilog,escapeinside={}]
+`timescale 1ns/1ps
+
+// 32 位四路一选一多路选择器（4-to-1 Multiplexer）
+module mux4_1 (
+    input  [31:0] in0,       // 第 0 路 32 位数据输入
+    input  [31:0] in1,       // 第 1 路 32 位数据输入
+    input  [31:0] in2,       // 第 2 路 32 位数据输入
+    input  [31:0] in3,       // 第 3 路 32 位数据输入
+    input  [1:0]  sel,       // 2 位选择信号
+    output reg [31:0] out    // 选中的 32 位数据输出
+);
+
+    // 组合逻辑：sel 决定哪一路输入连接到输出。
+    always @(*) begin
+        case (sel)
+            2'b00: out = in0;
+            2'b01: out = in1;
+            2'b10: out = in2;
+            2'b11: out = in3;
+            default: out = 32'b0;
+        endcase
+    end
+
+endmodule
+\end{lstlisting}
+
+\subsection{仿真代码}
+
+\subsubsection{仿真方案与固定测试数据}
+
+仿真文件实例化 \verb|mux4_1|，将四路输入固定为容易辨认的十六进制常量，再以 20 ns 为间隔依次施加四种选择状态。固定激励能够使波形中的四个测试区间与报告分析一一对应，也避免随机数导致结果难以复核。
+
+Testbench 使用一个 \verb|initial| 过程完成激励。每次选择状态保持 \verb|#20|，在当前状态稳定 20 ns 后先执行输出检查，再切换到下一种选择状态，因此四组有效测试区间分别为 0--20 ns、20--40 ns、40--60 ns 和 60--80 ns。检查任务使用 \verb|!==| 运算符，当输出包含 \verb|X| 或 \verb|Z| 时也会判定为失败。
+
+\begin{table}[H]
+    \centering
+    \caption{四路多路选择器固定测试数据}
+    \label{tab:mux4_data}
+    \begin{tabular}{c|c}
+        \hline
+        信号 & 固定值 \\
+        \hline
+        \verb|in0| & \verb|32'h11111111| \\
+        \verb|in1| & \verb|32'h22222222| \\
+        \verb|in2| & \verb|32'h33333333| \\
+        \verb|in3| & \verb|32'h44444444| \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{四组功能仿真时序}
+    \label{tab:mux4_groups}
+    \begin{tabular}{c|c|c|c}
+        \hline
+        组别 & 时间区间 & \verb|sel| & 预期 \verb|out| \\
+        \hline
+        第一组 & 0--20 ns & \verb|2'b00| & \verb|0x11111111| \\
+        第二组 & 20--40 ns & \verb|2'b01| & \verb|0x22222222| \\
+        第三组 & 40--60 ns & \verb|2'b10| & \verb|0x33333333| \\
+        第四组 & 60--80 ns & \verb|2'b11| & \verb|0x44444444| \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\subsubsection{Testbench 源代码}
+
+仿真文件 \verb|mux4_1_tb.v| 如下。
+
+\begin{lstlisting}[language=Verilog,escapeinside={}]
+`timescale 1ns/1ps
+
+module mux4_1_tb;
+
+    reg  [31:0] in0;
+    reg  [31:0] in1;
+    reg  [31:0] in2;
+    reg  [31:0] in3;
+    reg  [1:0]  sel;
+    wire [31:0] out;
+    integer fail_count;
+
+    mux4_1 uut (
+        .in0(in0),
+        .in1(in1),
+        .in2(in2),
+        .in3(in3),
+        .sel(sel),
+        .out(out)
+    );
+
+    // 在当前选择状态稳定后检查选择结果。
+    task check_case;
+        input integer group_number;
+        input [1:0] expected_sel;
+        input [31:0] expected_out;
+        begin
+            if ((sel !== expected_sel) || (out !== expected_out)) begin
+                fail_count = fail_count + 1;
+                $display("FAIL: Group %0d, sel=0x%0h, out=0x%08h, expected=0x%08h",
+                         group_number, sel, out, expected_out);
+            end
+            else begin
+                $display("PASS: Group %0d, sel=0x%0h, out=0x%08h",
+                         group_number, sel, out);
+            end
+        end
+    endtask
+
+    initial begin
+        fail_count = 0;
+
+        // 四路固定测试数据。
+        in0 = 32'h11111111;
+        in1 = 32'h22222222;
+        in2 = 32'h33333333;
+        in3 = 32'h44444444;
+
+        // 四组测试分别占用 0-20 ns、20-40 ns、40-60 ns 和 60-80 ns。
+        sel = 2'b00;
+        #20 check_case(1, 2'b00, 32'h11111111);
+
+        sel = 2'b01;
+        #20 check_case(2, 2'b01, 32'h22222222);
+
+        sel = 2'b10;
+        #20 check_case(3, 2'b10, 32'h33333333);
+
+        sel = 2'b11;
+        #20 check_case(4, 2'b11, 32'h44444444);
+
+        if (fail_count == 0)
+            $display("ALL TESTS PASSED");
+        else
+            $display("%0d TEST(S) FAILED", fail_count);
+
+        $finish;
+    end
+
+endmodule
+\end{lstlisting}
+
+\subsection{波形仿真结果及分析}
+
+在 Vivado 2018.3 中选择 \verb|mux4_1_tb| 作为仿真顶层，运行 Behavioral Simulation，并将 \verb|in0|、\verb|in1|、\verb|in2|、\verb|in3| 和 \verb|out| 设置为十六进制显示，将 \verb|sel| 设置为二进制显示。完整的 0--80 ns 波形如图 \ref{fig:mux4_waveform} 所示。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\textwidth]{figures/lab1/mux4_1_waveform.png}
+    \caption{四路多路选择器四组功能仿真波形}
+    \label{fig:mux4_waveform}
+\end{figure}
+
+由图 \ref{fig:mux4_waveform} 可见，四路输入在整个仿真过程中保持不变，选择信号每隔 20 ns 改变一次，输出随选择信号立即切换。四组数据分析如下：
+
+\begin{enumerate}
+    \item 第一组位于 0--20 ns，\verb|sel=00|，选择 \verb|in0|，输出为 \verb|0x11111111|。
+    \item 第二组位于 20--40 ns，\verb|sel=01|，选择 \verb|in1|，输出为 \verb|0x22222222|。
+    \item 第三组位于 40--60 ns，\verb|sel=10|，选择 \verb|in2|，输出为 \verb|0x33333333|。
+    \item 第四组位于 60--80 ns，\verb|sel=11|，选择 \verb|in3|，输出为 \verb|0x44444444|。
+\end{enumerate}
+
+四组输出均与理论值一致，Testbench 的四组检查均通过，说明该模块能够正确实现四路数据选择功能。
+
+\subsection{RTL 原理图及分析}
+
+在 Vivado 中将 \verb|mux4_1| 设置为设计顶层，选择 \verb|RTL Analysis -> Open Elaborated Design -> Schematic|，得到如图 \ref{fig:mux4_schematic} 所示的 RTL 原理图。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\textwidth]{figures/lab1/mux4_1_schematic.png}
+    \caption{四路多路选择器 Vivado RTL 原理图}
+    \label{fig:mux4_schematic}
+\end{figure}
+
+从图中可以看出，模块接收四路 32 位输入 \verb|in0[31:0]|、\verb|in1[31:0]|、\verb|in2[31:0]| 和 \verb|in3[31:0]|，接收 2 位选择信号 \verb|sel[1:0]|，输出 32 位数据 \verb|out[31:0]|。RTL 原理图将四路输入连接到多路选择逻辑，\verb|sel| 控制当前输出的数据来源。该模块没有时钟和存储状态，属于组合逻辑电路。本实验只对 RTL 级结构进行分析，不对尚未观察到的门级综合结构作额外描述。
+

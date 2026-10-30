@@ -1,0 +1,39 @@
+{
+  "url": "http://127.0.0.1:8000/",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "deviceScaleFactor": 2,
+  "seed": 123,
+  "size": 11,
+  "runId": "8de8cf6f-c0a7-4dc2-84e0-f10ea4d036f8",
+  "mode": "bfs",
+  "goal": {
+    "row": 9,
+    "col": 9
+  },
+  "blockedNeighbors": [
+    [
+      8,
+      9
+    ],
+    [
+      9,
+      8
+    ],
+    [
+      10,
+      9
+    ],
+    [
+      9,
+      10
+    ]
+  ],
+  "found": false,
+  "path": [],
+  "visitedNodes": 39,
+  "status": "此阵暗巷皆断，无解 · 足迹已封入卷轴",
+  "pageErrors": []
+}
