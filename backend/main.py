@@ -22,6 +22,7 @@ class MazeSnapshot(BaseModel):
     size: Literal[11, 21, 31, 41, 51]
     seed: int = Field(ge=1, le=4_294_967_295)
     generatorVersion: Literal[1]
+    generatorId: Literal["dfs", "prim", "kruskal"] = "dfs"
     edited: bool
     start: Point
     goal: Point

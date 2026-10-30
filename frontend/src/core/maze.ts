@@ -1,11 +1,13 @@
 export type Point = Readonly<{ row: number; col: number }>;
-export type Direction = "up" | "down" | "left" | "right";
 export type Cell = 0 | 1;
+export type Direction = "up" | "down" | "left" | "right";
+export type GeneratorId = "dfs" | "prim" | "kruskal";
 
 export type Maze = Readonly<{
   size: number;
   seed: number;
   generatorVersion: 1;
+  generatorId?: GeneratorId;
   edited: boolean;
   start: Point;
   goal: Point;
@@ -62,6 +64,7 @@ export function generateMaze(size: number, seed: number): Maze {
     size,
     seed,
     generatorVersion: 1,
+    generatorId: "dfs",
     edited: false,
     start,
     goal: { row: size - 2, col: size - 2 },
@@ -115,14 +118,19 @@ export function applyEdit(maze: Maze, tool: EditTool, point: Point): { maze: Maz
   };
 }
 
-export const toChallengeCode = (maze: Maze) => `PM${maze.generatorVersion}-${maze.size}-${maze.seed}`;
+export const toChallengeCode = (maze: Maze) => maze.generatorId && maze.generatorId !== "dfs"
+  ? `PM2-${maze.generatorId}-${maze.size}-${maze.seed}`
+  : `PM${maze.generatorVersion}-${maze.size}-${maze.seed}`;
 
-export function parseChallengeCode(code: string): { size: MazeSize; seed: number } | null {
-  const match = /^PM1-(\d+)-([1-9]\d*)$/.exec(code.trim().toUpperCase());
-  if (!match) return null;
-  const size = Number(match[1]) as MazeSize;
+export function parseChallengeCode(code: string): { size: MazeSize; seed: number; algorithm: GeneratorId } | null {
+  const normalized = code.trim().toUpperCase();
+  const legacy = /^PM1-(\d+)-([1-9]\d*)$/.exec(normalized);
+  const current = /^PM2-(DFS|PRIM|KRUSKAL)-(\d+)-([1-9]\d*)$/.exec(normalized);
+  if (!legacy && !current) return null;
+  const size = Number((current ?? legacy)![current ? 2 : 1]) as MazeSize;
   if (!SUPPORTED_SIZES.includes(size)) return null;
-  const seed = Number(match[2]);
+  const seed = Number((current ?? legacy)![current ? 3 : 2]);
   if (!Number.isInteger(seed) || seed > 0xffffffff) return null;
-  return { size, seed };
+  const algorithm = (current ? current[1]!.toLowerCase() : "dfs") as GeneratorId;
+  return { size, seed, algorithm };
 }

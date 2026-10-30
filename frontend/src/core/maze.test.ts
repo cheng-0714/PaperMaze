@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyEdit, generateMaze, movePlayer, parseChallengeCode, toChallengeCode, type Maze } from "./maze";
+import { generateMazeWithTrace } from "./generator";
 import { searchMaze } from "./search";
 
 describe("maze", () => {
@@ -14,7 +15,7 @@ describe("maze", () => {
       const bfs = searchMaze(first, "bfs");
       expect(bfs.found).toBe(true);
       expect(searchMaze(first, "astar").path.length).toBe(bfs.path.length);
-      expect(parseChallengeCode(toChallengeCode(first))).toEqual({ size, seed: 12345 });
+      expect(parseChallengeCode(toChallengeCode(first))).toEqual({ size, seed: 12345, algorithm: "dfs" });
     }
   });
 
@@ -56,7 +57,12 @@ describe("maze", () => {
   it("round-trips a deterministic challenge code", () => {
     const maze = generateMaze(21, 12345);
     expect(toChallengeCode(maze)).toBe("PM1-21-12345");
-    expect(parseChallengeCode("PM1-21-12345")).toEqual({ size: 21, seed: 12345 });
+    expect(parseChallengeCode("PM1-21-12345")).toEqual({ size: 21, seed: 12345, algorithm: "dfs" });
     expect(parseChallengeCode("bad-code")).toBeNull();
+  });
+  it("round-trips non-DFS generator identity in challenge codes", () => {
+    const maze = generateMazeWithTrace(21, 12345, "prim").maze;
+    expect(toChallengeCode(maze)).toBe("PM2-prim-21-12345");
+    expect(parseChallengeCode("PM2-prim-21-12345")).toEqual({ size: 21, seed: 12345, algorithm: "prim" });
   });
 });

@@ -17,3 +17,7 @@ dist/
 *.sqlite3
 
 *.tsbuildinfo
+
+# Submission archives; do not commit.
+*.zip
+

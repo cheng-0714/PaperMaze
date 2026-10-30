@@ -9,7 +9,7 @@ from backend.main import create_app
 def test_large_edited_map_and_long_trace_survive_restart(tmp_path, size):
     run = search_run("large")
     cells = [[1 if r in (0, size - 1) or c in (0, size - 1) else 0 for c in range(size)] for r in range(size)]
-    run["maze"].update(size=size, cells=cells, edited=True)
+    run["maze"].update(size=size, cells=cells, edited=True, generatorId="prim")
     run["visitedOrder"] = [{"row": r, "col": c} for r in range(1, size - 1) for c in range(1, size - 1)]
     database = tmp_path / "large.sqlite3"
     with TestClient(create_app(database)) as client:
@@ -32,6 +32,7 @@ def manual_run(run_id: str = "run-1") -> dict:
             "size": 11,
             "seed": 1,
             "generatorVersion": 1,
+            "generatorId": "dfs",
             "edited": False,
             "start": {"row": 1, "col": 1},
             "goal": {"row": 1, "col": 2},

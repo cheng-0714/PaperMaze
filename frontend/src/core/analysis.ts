@@ -61,7 +61,7 @@ export function manualMetrics(path: readonly Point[], shortestPathLength: number
   const detourRate = shortestPathLength && shortestPathLength > 0 ? Math.max(0, (manualSteps - shortestPathLength) / shortestPathLength) : null;
   const efficiency = manualSteps > 0 && shortestPathLength !== null ? shortestPathLength / manualSteps : null;
   const explorationCoverage = reachablePassages > 0 ? new Set(path.map(pointKey)).size / reachablePassages : 0;
-  const badge = efficiency === null ? "待完成" : efficiency >= 0.95 ? "近道大师" : efficiency >= 0.75 ? "路线清晰" : "勇于探索";
+  const badge = efficiency === null ? "仍在途中" : efficiency >= 0.95 ? "精敏行者" : efficiency >= 0.75 ? "步履笃定" : "不畏险远";
   return { manualSteps, shortestPathLength, detourRate, efficiency, explorationCoverage, collisionCount, elapsedMs, badge };
 }
 
