@@ -88,3 +88,17 @@ The backend storage implementation is unchanged, and the real pre-upgrade GET pr
 ### Verdict: **MERGE_BLOCKED**
 
 Reasons: legacy-record retries return HTTP 500; valid disconnected maps produce invalid coverage and defeat AI fallback; A* teaching replay retains obsolete candidates; promised parent-pointer visualization/acceptance claims remain inconsistent with implementation. Correct these issues and add focused regression checks before approval. The heuristic naming/duplication notes alone do not block merging. Recheck the documented startup path and applicable browser acceptance before release; successful unit tests and fast-forward topology do not replace those checks.
+
+## Post-review remediation (d73fdfb)
+
+P1 blockers from the review above were fixed on `codex/inkwash-redesign` before merge:
+
+1. **Coverage denominator** — `analyzeMaze` now counts start-reachable passages; goal BFS remains in `distanceField`. Regression: disconnected-map coverage ≤ 100%.
+2. **Legacy idempotent POST** — `_normalize_stored_run` fills missing optional fields / `maze.generatorId` before compare. Regression: pre-upgrade SQLite row retries with 200.
+3. **A* teaching relax** — `replayAstarTeaching` removes frontier entries by coordinates only. Regression: cyclic-map frontier unique after first relax.
+
+Re-verification after fix: frontend `npm test` 27/27 pass; `vue-tsc` pass; backend `pytest` 13/13 pass.
+
+Remaining non-blocking: parent-pointer UI still not rendered (P2); heuristic naming/duplication notes unchanged.
+
+**Updated verdict: MERGE_OK (fast-forward), with open P2 parent-pointer visualization.**
